@@ -1,0 +1,21 @@
+rules_version = '2';
+
+// ARŞİV güvenlik kuralları: her kullanıcı yalnızca kendi users/{uid}
+// belgesini ve users/{uid}/library/* alt koleksiyonunu okuyup yazabilir.
+// Yayınlamak için: firebase deploy --only firestore:rules
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId} {
+      allow read, delete: if request.auth != null && request.auth.uid == userId;
+
+      // İstemci plan alanına yalnızca "free" yazabilir; premium'a geçişi
+      // ödeme doğrulandıktan sonra sunucu (Admin SDK) yapacak.
+      allow write: if request.auth != null && request.auth.uid == userId
+        && request.resource.data.plan == 'free';
+
+      match /library/{itemId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+  }
+}

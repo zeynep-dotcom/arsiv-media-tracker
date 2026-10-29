@@ -60,4 +60,36 @@ class ContentItem {
         ContentType.book => 'Google Books puanı',
         ContentType.game => 'RAWG puanı',
       };
+
+  /// Firestore ve yerel kayıt için düz harita (renkler ARGB sayısı olarak).
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'type': type.name,
+        'title': title,
+        'year': year,
+        'rating': rating,
+        'genres': genres,
+        'description': description,
+        'meta': meta,
+        'imageUrl': imageUrl,
+        'backdropUrl': backdropUrl,
+        'artColors': [for (final c in artColors) c.toARGB32()],
+      };
+
+  factory ContentItem.fromMap(Map<String, dynamic> map) => ContentItem(
+        id: map['id'] as String,
+        type: ContentType.values.byName(map['type'] as String),
+        title: map['title'] as String? ?? '',
+        year: (map['year'] as num?)?.toInt() ?? 0,
+        rating: (map['rating'] as num?)?.toDouble() ?? 0,
+        genres: List<String>.from(map['genres'] as List? ?? const []),
+        description: map['description'] as String? ?? '',
+        meta: map['meta'] as String? ?? '',
+        imageUrl: map['imageUrl'] as String?,
+        backdropUrl: map['backdropUrl'] as String?,
+        artColors: [
+          for (final c in map['artColors'] as List? ?? const [])
+            Color((c as num).toInt()),
+        ],
+      );
 }

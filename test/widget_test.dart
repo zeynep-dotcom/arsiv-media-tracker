@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
+import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -11,6 +13,7 @@ import 'package:arsiv_app/models/content_item.dart';
 import 'package:arsiv_app/models/content_type.dart';
 import 'package:arsiv_app/models/library_entry.dart';
 import 'package:arsiv_app/services/app_services.dart';
+import 'package:arsiv_app/services/auth_service.dart';
 import 'package:arsiv_app/services/content_service.dart';
 import 'package:arsiv_app/services/google_books_service.dart';
 import 'package:arsiv_app/services/library_store.dart';
@@ -50,7 +53,12 @@ void main() {
     AppServices.films = FakeService(SampleData.films);
     AppServices.books = FakeService(SampleData.books);
     AppServices.games = FakeService(SampleData.games);
-    LibraryStore.instance.clear();
+    LibraryStore.instance.stop();
+    // Uygulama AuthGate'ten açılır; testler giriş yapmış kullanıcıyla başlar.
+    AuthService.instance = AuthService(
+      auth: MockFirebaseAuth(signedIn: true),
+      firestore: FakeFirebaseFirestore(),
+    );
   });
 
   testWidgets('Alt menü dört ekran arasında geçiş yapar',
