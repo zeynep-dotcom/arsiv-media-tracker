@@ -11,10 +11,36 @@ import 'package:arsiv_app/widgets/poster_art.dart';
 import 'package:arsiv_app/widgets/type_badge.dart';
 
 /// 02 · Detay: büyük afiş, bilgiler, kütüphaneye ekleme, benzer içerikler.
-class DetailScreen extends StatelessWidget {
+/// Açılınca kart bilgisiyle başlar; servisten detay (tam açıklama,
+/// yönetmen/yazar/geliştirici, süre/sayfa) gelince ekran güncellenir.
+class DetailScreen extends StatefulWidget {
   const DetailScreen({super.key, required this.item});
 
   final ContentItem item;
+
+  @override
+  State<DetailScreen> createState() => _DetailScreenState();
+}
+
+class _DetailScreenState extends State<DetailScreen> {
+  late ContentItem item = widget.item;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDetails();
+  }
+
+  Future<void> _loadDetails() async {
+    try {
+      final detailed =
+          await AppServices.forType(widget.item.type).getDetails(widget.item);
+      if (mounted) setState(() => item = detailed);
+    } catch (e) {
+      // Detay gelmezse kart bilgisi gösterilmeye devam eder.
+      debugPrint('[Detay] ${widget.item.id} detayı alınamadı · $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -92,6 +118,18 @@ class DetailScreen extends StatelessWidget {
                       item.detailInfo,
                       style: const TextStyle(color: AppColors.textSecondary),
                     ),
+                    if (item.creator != null || item.lengthLabel != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        [
+                          if (item.creator != null)
+                            '${item.creatorLabel}: ${item.creator}',
+                          if (item.lengthLabel != null) item.lengthLabel!,
+                        ].join(' · '),
+                        style:
+                            const TextStyle(color: AppColors.textSecondary),
+                      ),
+                    ],
                     const SizedBox(height: 10),
                     Row(
                       children: [
@@ -217,6 +255,9 @@ class DetailScreen extends StatelessWidget {
                           ),
                         ),
                       ),
+                    ],
+                    if (entry != null &&
+                        entry.status == LibraryStatus.inProgress) ...[
                       const SizedBox(height: 16),
                       _ProgressSlider(
                         progress: entry.progress,
@@ -232,7 +273,7 @@ class DetailScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              SliverToBoxAdapter(child: _SimilarRow(item: item)),
+              SliverToBoxAdapter(child: _SimilarRow(item: widget.item)),
             ],
           );
         },

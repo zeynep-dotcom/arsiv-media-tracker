@@ -7,6 +7,16 @@ import 'package:arsiv_app/models/content_item.dart';
 import 'package:arsiv_app/models/content_type.dart';
 import 'package:arsiv_app/models/library_entry.dart';
 
+/// Kütüphanem'deki sıralama seçenekleri.
+enum LibrarySort {
+  recent('Son eklenen'),
+  rating('Puana göre'),
+  name('İsme göre');
+
+  const LibrarySort(this.label);
+  final String label;
+}
+
 /// Kullanıcının kütüphanesi. Oturum açılınca (AuthGate [start] çağırır)
 /// users/{uid}/library koleksiyonunu dinler; her değişiklik önce bellekte
 /// yapılır, sonra Firestore'a yazılır. Oturum yokken yalnızca bellekte tutar.
@@ -178,4 +188,38 @@ class LibraryStore extends ChangeNotifier {
       entries.where((e) => e.item.type == ContentType.game).toList();
 
   List<LibraryEntry> favorites() => entries.where((e) => e.favorite).toList();
+
+  /// Kütüphanem çipleri: [status] verilirse yalnızca o durumdakiler
+  /// (null = Tümü), ardından [sort]'a göre sıralanır.
+  /// - Son eklenen: en yeni eklenen başta.
+  /// - Puana göre: kullanıcının puanı yüksek olan başta; puanlanmamışlar
+  ///   sonda (aralarında API puanına göre).
+  /// - İsme göre: A'dan Z'ye.
+  static List<LibraryEntry> filterAndSort(
+    List<LibraryEntry> entries, {
+    LibraryStatus? status,
+    LibrarySort sort = LibrarySort.recent,
+  }) {
+    final result = [
+      for (final e in entries)
+        if (status == null || e.status == status) e,
+    ];
+    int byName(LibraryEntry a, LibraryEntry b) =>
+        a.item.title.toLowerCase().compareTo(b.item.title.toLowerCase());
+
+    switch (sort) {
+      case LibrarySort.recent:
+        result.sort((a, b) => b.addedAt.compareTo(a.addedAt));
+      case LibrarySort.rating:
+        result.sort((a, b) {
+          final byUser = (b.userRating ?? 0).compareTo(a.userRating ?? 0);
+          if (byUser != 0) return byUser;
+          final byApi = b.item.rating.compareTo(a.item.rating);
+          return byApi != 0 ? byApi : byName(a, b);
+        });
+      case LibrarySort.name:
+        result.sort(byName);
+    }
+    return result;
+  }
 }

@@ -27,15 +27,24 @@ class FakeService implements ContentService {
   final List<ContentItem> items;
 
   @override
-  Future<List<ContentItem>> getPopular() async => items;
+  Future<List<ContentItem>> getPopular({int page = 1}) async =>
+      page == 1 ? items : const [];
 
   @override
-  Future<List<ContentItem>> search(String query) async => items
-      .where((b) => b.title.toLowerCase().contains(query.toLowerCase()))
-      .toList();
+  Future<List<ContentItem>> search(String query, {int page = 1}) async =>
+      page > 1
+          ? const []
+          : items
+              .where(
+                  (b) => b.title.toLowerCase().contains(query.toLowerCase()))
+              .toList();
 
   @override
-  Future<List<ContentItem>> getByGenre(Genre genre) async => items;
+  Future<List<ContentItem>> getByGenre(Genre genre, {int page = 1}) async =>
+      page == 1 ? items : const [];
+
+  @override
+  Future<ContentItem> getDetails(ContentItem item) async => item;
 }
 
 /// Testleri telefon boyutunda çalıştır (varsayılan 800x600 çok küçük).

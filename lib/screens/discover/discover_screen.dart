@@ -85,18 +85,21 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               AsyncContentRow(
                 title: 'Popüler Filmler',
                 future: _films,
+                loadPage: (page) => AppServices.films.getPopular(page: page),
                 fallback: SampleData.films,
               ),
             if (_show(ContentType.book))
               AsyncContentRow(
                 title: 'Çok Okunan Kitaplar',
                 future: _books,
+                loadPage: (page) => AppServices.books.getPopular(page: page),
                 fallback: SampleData.books,
               ),
             if (_show(ContentType.game))
               AsyncContentRow(
                 title: 'Trend Oyunlar',
                 future: _games,
+                loadPage: (page) => AppServices.games.getPopular(page: page),
                 fallback: SampleData.games,
               ),
             const _Attribution(),

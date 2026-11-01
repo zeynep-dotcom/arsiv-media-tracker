@@ -83,6 +83,94 @@ void main() {
     });
   });
 
+  group('ContentItem detay alanları', () {
+    test('copyWith yalnızca verilen alanları değiştirir', () {
+      final detailed = film.copyWith(creator: 'Christopher Nolan', length: 148);
+      expect(detailed.id, film.id);
+      expect(detailed.title, film.title);
+      expect(detailed.description, film.description);
+      expect(detailed.creator, 'Christopher Nolan');
+      expect(detailed.length, 148);
+      expect(detailed.creatorLabel, 'Yönetmen');
+      expect(detailed.lengthLabel, '148 dk');
+    });
+
+    test('kitapta sayfa, oyunda saat; değer yoksa etiket null', () {
+      expect(book.copyWith(length: 412).lengthLabel, '412 sayfa');
+      expect(book.creatorLabel, 'Yazar');
+      expect(SampleData.games.first.copyWith(length: 25).lengthLabel,
+          '25 saat');
+      expect(book.lengthLabel, isNull);
+    });
+
+    test('detay alanları toMap / fromMap ile korunur', () {
+      final copy = ContentItem.fromMap(
+          film.copyWith(creator: 'Yönetmen Adı', length: 120).toMap());
+      expect(copy.creator, 'Yönetmen Adı');
+      expect(copy.length, 120);
+    });
+  });
+
+  group('LibraryStore.filterAndSort', () {
+    LibraryEntry entry(String title,
+            {LibraryStatus status = LibraryStatus.planned,
+            int? userRating,
+            required DateTime addedAt}) =>
+        LibraryEntry(
+          item: film.copyWith(id: 'id_$title', title: title),
+          status: status,
+          userRating: userRating,
+          addedAt: addedAt,
+        );
+
+    final a = entry('Zeta',
+        status: LibraryStatus.done, userRating: 7, addedAt: DateTime(2026, 1));
+    final b = entry('alfa',
+        status: LibraryStatus.inProgress, addedAt: DateTime(2026, 3));
+    final c = entry('Beta',
+        status: LibraryStatus.done, userRating: 9, addedAt: DateTime(2026, 2));
+    final all = [a, b, c];
+
+    List<String> titles(List<LibraryEntry> list) =>
+        list.map((e) => e.item.title).toList();
+
+    test('varsayılan: tümü, en son eklenen başta', () {
+      expect(titles(LibraryStore.filterAndSort(all)), ['alfa', 'Beta', 'Zeta']);
+    });
+
+    test('duruma göre filtreler', () {
+      expect(
+        titles(LibraryStore.filterAndSort(all, status: LibraryStatus.done)),
+        ['Beta', 'Zeta'],
+      );
+      expect(
+        LibraryStore.filterAndSort(all, status: LibraryStatus.dropped),
+        isEmpty,
+      );
+    });
+
+    test('puana göre: yüksek puan başta, puansız sonda', () {
+      expect(
+        titles(LibraryStore.filterAndSort(all, sort: LibrarySort.rating)),
+        ['Beta', 'Zeta', 'alfa'],
+      );
+    });
+
+    test('isme göre: büyük/küçük harf fark etmeden A-Z', () {
+      expect(
+        titles(LibraryStore.filterAndSort(all, sort: LibrarySort.name)),
+        ['alfa', 'Beta', 'Zeta'],
+      );
+    });
+
+    test('filtre ve sıralama birlikte, orijinal liste değişmez', () {
+      final result = LibraryStore.filterAndSort(all,
+          status: LibraryStatus.done, sort: LibrarySort.name);
+      expect(titles(result), ['Beta', 'Zeta']);
+      expect(titles(all), ['Zeta', 'alfa', 'Beta']);
+    });
+  });
+
   group('LibraryStore Firestore eşitlemesi', () {
     test('eklenen içerik users/{uid}/library/{itemId} belgesine yazılır',
         () async {
