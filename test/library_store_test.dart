@@ -108,6 +108,44 @@ void main() {
       expect(data?['favorite'], isTrue);
     });
 
+    test('ilerleme yazılır, planlanmış içerik "Devam ediyor" olur', () async {
+      await startFor('u1');
+      store.add(film);
+      store.setProgress(film, 0.45);
+
+      final data = await docData('users/u1/library/${film.id}');
+      expect(data?['progress'], 0.45);
+      expect(data?['status'], 'inProgress');
+      expect(data?['completedAt'], isNull);
+    });
+
+    test('%100 ilerleme "Bitti" yapar, geri çekince "Devam ediyor"a döner',
+        () async {
+      await startFor('u1');
+      store.setProgress(film, 1);
+
+      var data = await docData('users/u1/library/${film.id}');
+      expect(data?['status'], 'done');
+      expect(data?['completedAt'], isA<int>());
+
+      store.setProgress(film, 0.8);
+      data = await docData('users/u1/library/${film.id}');
+      expect(data?['status'], 'inProgress');
+      expect(data?['completedAt'], isNull);
+    });
+
+    test('ilerleme 0-1 aralığına sıkıştırılır, "Yarım" durumu korunur',
+        () async {
+      await startFor('u1');
+      store.setStatus(film, LibraryStatus.dropped);
+      store.setProgress(film, -0.2);
+      expect(store.entryFor(film)?.progress, 0);
+      expect(store.entryFor(film)?.status, LibraryStatus.dropped);
+
+      store.setProgress(film, 1.7);
+      expect(store.entryFor(film)?.progress, 1);
+    });
+
     test('kaldırılan içerik silinir', () async {
       await startFor('u1');
       store.add(film);

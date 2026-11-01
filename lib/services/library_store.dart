@@ -140,6 +140,26 @@ class LibraryStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Detay ekranındaki ilerleme çubuğu (0-1). Durum ilerlemeyle uyumlu
+  /// tutulur: %100 olunca "Bitti" ve tamamlanma tarihi; %100'den geri
+  /// çekilince ya da planlanmış bir içerik ilerleyince "Devam ediyor".
+  void setProgress(ContentItem item, double progress) {
+    final entry = _ensure(item);
+    entry.progress = progress.clamp(0.0, 1.0).toDouble();
+    if (entry.progress == 1) {
+      entry.status = LibraryStatus.done;
+      entry.completedAt ??= DateTime.now();
+    } else {
+      if (entry.status == LibraryStatus.done ||
+          (entry.status == LibraryStatus.planned && entry.progress > 0)) {
+        entry.status = LibraryStatus.inProgress;
+      }
+      entry.completedAt = null;
+    }
+    _save(entry);
+    notifyListeners();
+  }
+
   /// Testler için kütüphaneyi boşaltır.
   @visibleForTesting
   void clear() {

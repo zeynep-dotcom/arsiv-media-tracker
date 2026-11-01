@@ -217,6 +217,12 @@ class DetailScreen extends StatelessWidget {
                           ),
                         ),
                       ),
+                      const SizedBox(height: 16),
+                      _ProgressSlider(
+                        progress: entry.progress,
+                        onChangeEnd: (value) =>
+                            store.setProgress(item, value),
+                      ),
                     ],
                     const SizedBox(height: 18),
                     Text(
@@ -304,6 +310,59 @@ class _OutlineAction extends StatelessWidget {
   }
 }
 
+/// İlerleme çubuğu. Sürüklerken yalnızca ekrandaki değer değişir; parmak
+/// kalkınca [onChangeEnd] bir kez çağrılır, böylece Firestore'a her adımda
+/// değil tek seferde yazılır.
+class _ProgressSlider extends StatefulWidget {
+  const _ProgressSlider({required this.progress, required this.onChangeEnd});
+
+  final double progress;
+  final ValueChanged<double> onChangeEnd;
+
+  @override
+  State<_ProgressSlider> createState() => _ProgressSliderState();
+}
+
+class _ProgressSliderState extends State<_ProgressSlider> {
+  double? _dragValue;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = (_dragValue ?? widget.progress).clamp(0.0, 1.0).toDouble();
+    final percent = (value * 100).round();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text(
+              'İlerleme',
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            ),
+            const Spacer(),
+            Text(
+              '%$percent',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+        Slider(
+          value: value,
+          divisions: 20,
+          label: '%$percent',
+          activeColor: AppColors.red,
+          inactiveColor: AppColors.divider,
+          onChanged: (v) => setState(() => _dragValue = v),
+          onChangeEnd: (v) {
+            setState(() => _dragValue = null);
+            widget.onChangeEnd(v);
+          },
+        ),
+      ],
+    );
+  }
+}
 
 /// Benzer içerikler: aynı türdeki popüler içerikler, ilgili API'den.
 class _SimilarRow extends StatefulWidget {
