@@ -83,6 +83,22 @@ class GenreMap {
       rawgParam: 'tags',
       rawgValue: 'mystery',
     ),
+    Genre(
+      label: 'Dram',
+      aliases: ['dram', 'drama'],
+      tmdbId: 18,
+      booksSubject: 'drama',
+      rawgParam: 'tags',
+      rawgValue: 'drama',
+    ),
+    Genre(
+      label: 'Gerilim',
+      aliases: ['gerilim', 'thriller'],
+      tmdbId: 53,
+      booksSubject: 'thriller',
+      rawgParam: 'tags',
+      rawgValue: 'thriller',
+    ),
   ];
 
   /// Aranan kelime bir türle eşleşiyorsa o türü döndürür, yoksa null.

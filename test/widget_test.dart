@@ -132,6 +132,9 @@ void main() {
       expect(GenreMap.match('korku')?.tmdbId, 27);
       expect(GenreMap.match('  KORKU ')?.booksSubject, 'horror');
       expect(GenreMap.match('Bilim kurgu')?.tmdbId, 878);
+      expect(GenreMap.match('Dram')?.tmdbId, 18);
+      expect(GenreMap.match('gerilim')?.booksSubject, 'thriller');
+      expect(GenreMap.all.length, 9);
       expect(GenreMap.match('Harry Potter'), isNull);
     });
   });
