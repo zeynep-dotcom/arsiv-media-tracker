@@ -25,7 +25,11 @@ class GoogleBooksService implements ContentService {
   static const popularQueries = ['roman', 'novel', 'subject:fiction'];
 
   @override
-  Future<List<ContentItem>> getPopular() => _firstNonEmpty(popularQueries);
+  Future<List<ContentItem>> getPopular({int page = 1}) {
+    // TODO(Abdulkadir): sayfalama; şimdilik yalnızca 1. sayfa.
+    if (page > 1) return Future.value(const []);
+    return _firstNonEmpty(popularQueries);
+  }
 
   /// Sorguları sırayla dener; bir sorgu hata verirse ya da boş dönerse
   /// sıradakine geçer. Hepsi hata verirse son hatayı iletir.
@@ -44,16 +48,17 @@ class GoogleBooksService implements ContentService {
   }
 
   @override
-  Future<List<ContentItem>> search(String query) {
+  Future<List<ContentItem>> search(String query, {int page = 1}) {
     final q = query.trim();
-    if (q.isEmpty) return Future.value(const []);
+    if (q.isEmpty || page > 1) return Future.value(const []);
     return _fetch({'q': 'intitle:$q'});
   }
 
   /// Konu sorgusu bazı bölgelerde boş dönüyor; sırayla konu, İngilizce tür
   /// adı ve Türkçe tür adıyla dener.
   @override
-  Future<List<ContentItem>> getByGenre(Genre genre) {
+  Future<List<ContentItem>> getByGenre(Genre genre, {int page = 1}) {
+    if (page > 1) return Future.value(const []);
     final queries = [
       'subject:${genre.booksSubject}',
       genre.booksSubject,
@@ -61,6 +66,12 @@ class GoogleBooksService implements ContentService {
     ];
     return _firstNonEmpty(queries);
   }
+
+  /// Şimdilik listedeki bilgiyi aynen döndürür.
+  /// TODO(Abdulkadir): /books/v1/volumes/{id} ile detayı çekip
+  /// `item.copyWith(...)` döndür.
+  @override
+  Future<ContentItem> getDetails(ContentItem item) => Future.value(item);
 
   Future<List<ContentItem>> _fetch(Map<String, String> params) async {
     final uri = Uri.https('www.googleapis.com', '/books/v1/volumes', {

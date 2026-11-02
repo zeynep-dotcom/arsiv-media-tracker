@@ -29,18 +29,30 @@ class RawgService implements ContentService {
   };
 
   @override
-  Future<List<ContentItem>> getPopular() => _fetch({'ordering': '-added'});
+  Future<List<ContentItem>> getPopular({int page = 1}) {
+    // TODO(Enes): sayfalama; şimdilik yalnızca 1. sayfa.
+    if (page > 1) return Future.value(const []);
+    return _fetch({'ordering': '-added'});
+  }
 
   @override
-  Future<List<ContentItem>> search(String query) {
+  Future<List<ContentItem>> search(String query, {int page = 1}) {
     final q = query.trim();
-    if (q.isEmpty) return Future.value(const []);
+    if (q.isEmpty || page > 1) return Future.value(const []);
     return _fetch({'search': q, 'search_precise': 'true'});
   }
 
   @override
-  Future<List<ContentItem>> getByGenre(Genre genre) =>
-      _fetch({genre.rawgParam: genre.rawgValue, 'ordering': '-added'});
+  Future<List<ContentItem>> getByGenre(Genre genre, {int page = 1}) {
+    if (page > 1) return Future.value(const []);
+    return _fetch({genre.rawgParam: genre.rawgValue, 'ordering': '-added'});
+  }
+
+  /// Şimdilik listedeki bilgiyi aynen döndürür.
+  /// TODO(Enes): /api/games/{id} ile detayı çekip
+  /// `item.copyWith(...)` döndür.
+  @override
+  Future<ContentItem> getDetails(ContentItem item) => Future.value(item);
 
   Future<List<ContentItem>> _fetch(Map<String, String> params) async {
     if (_apiKey.isEmpty) {
