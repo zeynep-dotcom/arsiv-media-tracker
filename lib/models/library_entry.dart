@@ -32,4 +32,32 @@ class LibraryEntry {
   /// Kütüphaneye eklenme ve tamamlanma zamanı (İstatistik bunları kullanır).
   final DateTime addedAt;
   DateTime? completedAt;
+
+  /// users/{uid}/library/{itemId} belgesi ve yerel kayıt için düz harita.
+  /// Tarihler milisaniye olarak tutulur (Firestore'a bağımlı olmasın diye).
+  Map<String, dynamic> toMap() => {
+        'item': item.toMap(),
+        'status': status.name,
+        'progress': progress,
+        'favorite': favorite,
+        'userRating': userRating,
+        'addedAt': addedAt.millisecondsSinceEpoch,
+        'completedAt': completedAt?.millisecondsSinceEpoch,
+      };
+
+  factory LibraryEntry.fromMap(Map<String, dynamic> map) {
+    DateTime? date(Object? ms) =>
+        ms is num ? DateTime.fromMillisecondsSinceEpoch(ms.toInt()) : null;
+
+    return LibraryEntry(
+      item: ContentItem.fromMap(Map<String, dynamic>.from(map['item'] as Map)),
+      status: LibraryStatus.values.asNameMap()[map['status']] ??
+          LibraryStatus.planned,
+      progress: (map['progress'] as num?)?.toDouble() ?? 0,
+      favorite: map['favorite'] as bool? ?? false,
+      userRating: (map['userRating'] as num?)?.toInt(),
+      addedAt: date(map['addedAt']),
+      completedAt: date(map['completedAt']),
+    );
+  }
 }
