@@ -444,5 +444,125 @@ void main() {
       expect(game.meta, 'PC · PlayStation');
       expect(game.imageUrl, 'https://media.rawg.io/x.jpg');
     });
+
+    test('getPopular sayfa numarasını page parametresiyle gönderir', () async {
+      final client = MockClient((request) async {
+        expect(request.url.queryParameters['page'], '3');
+        return jsonResponse({'results': []});
+      });
+      final games =
+          await RawgService(client: client, apiKey: 'k').getPopular(page: 3);
+      expect(games, isEmpty);
+    });
+
+    test('son sayfadan sonrası (404) boş liste döner', () async {
+      final client = MockClient(
+          (_) async => http.Response('{"detail":"Invalid page."}', 404));
+      final games =
+          await RawgService(client: client, apiKey: 'k').getPopular(page: 50);
+      expect(games, isEmpty);
+    });
+
+    test('getDetails description_raw, playtime ve geliştiriciyi ekler',
+        () async {
+      final client = MockClient((request) async {
+        expect(request.url.path, '/api/games/7');
+        expect(request.url.queryParameters['key'], 'k');
+        return jsonResponse({
+          'id': 7,
+          'name': 'Karanlık Koridor',
+          'description_raw': 'Terk edilmiş bir hastanede geçen korku oyunu.'
+              '\n\n\n\nKaranlıkta hayatta kal.\n\nEspañol\nUn juego de terror.',
+          'playtime': 12,
+          'developers': [
+            {'name': 'Gece Stüdyo'},
+            {'name': 'Ayna Games'},
+            {'name': 'Üçüncü Ekip'},
+          ],
+        });
+      });
+
+      final base = ContentItem(
+        id: 'rawg_7',
+        type: ContentType.game,
+        title: 'Karanlık Koridor',
+        year: 2023,
+        rating: 8.4,
+        genres: const ['Aksiyon'],
+        description: 'Aksiyon türünde bir oyun.',
+        meta: 'PC',
+        artColors: const [Color(0xFF000000), Color(0xFFFFFFFF)],
+      );
+
+      final detail =
+          await RawgService(client: client, apiKey: 'k').getDetails(base);
+
+      expect(detail.description,
+          'Terk edilmiş bir hastanede geçen korku oyunu.\n\nKaranlıkta hayatta kal.');
+      expect(detail.length, 12);
+      expect(detail.lengthLabel, '12 saat');
+      expect(detail.creator, 'Gece Stüdyo, Ayna Games');
+      // Listeden gelen alanlar korunur.
+      expect(detail.title, 'Karanlık Koridor');
+      expect(detail.year, 2023);
+      expect(detail.meta, 'PC');
+    });
+
+    test('getDetails boş alanlarda eski bilgiyi korur', () async {
+      final client = MockClient((_) async => jsonResponse({
+            'id': 7,
+            'description_raw': '',
+            'playtime': 0,
+            'developers': [],
+          }));
+      final base = ContentItem(
+        id: 'rawg_7',
+        type: ContentType.game,
+        title: 'X',
+        year: 0,
+        rating: 0,
+        genres: const ['Oyun'],
+        description: 'Liste açıklaması',
+        meta: '',
+        artColors: const [Color(0xFF000000), Color(0xFFFFFFFF)],
+      );
+      final detail =
+          await RawgService(client: client, apiKey: 'k').getDetails(base);
+      expect(detail.description, 'Liste açıklaması');
+      expect(detail.length, isNull);
+      expect(detail.creator, isNull);
+    });
+
+    test('getDetails örnek veride istek göndermeden öğeyi döndürür',
+        () async {
+      var requests = 0;
+      final client = MockClient((_) async {
+        requests++;
+        return jsonResponse({});
+      });
+      final sample = SampleData.games.first;
+      final detail =
+          await RawgService(client: client, apiKey: 'k').getDetails(sample);
+      expect(requests, 0);
+      expect(detail, same(sample));
+    });
+
+    test('örnek oyunların açıklaması tek satırdan uzundur', () {
+      for (final game in SampleData.games) {
+        expect(game.description, contains('\n\n'), reason: game.title);
+        expect(game.creator, isNotNull, reason: game.title);
+        expect(game.lengthLabel, isNotNull, reason: game.title);
+      }
+    });
+
+    test('ilk sayfadaki 404 hatası yutulmaz', () async {
+      final client =
+          MockClient((_) async => http.Response('{"detail":"x"}', 404));
+      expect(
+        RawgService(client: client, apiKey: 'k').getPopular(),
+        throwsA(isA<ContentServiceException>()
+            .having((e) => e.statusCode, 'statusCode', 404)),
+      );
+    });
   });
 }
