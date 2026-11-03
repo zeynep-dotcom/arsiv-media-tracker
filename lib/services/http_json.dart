@@ -8,7 +8,8 @@ import 'package:arsiv_app/services/content_service.dart';
 
 /// Üç servisin ortak HTTP yardımcısı: zaman aşımı, hata mesajları ve
 /// kısa süreli önbellek. Aynı istek 5 dakika içinde tekrar gönderilmez;
-/// bu, API kotalarını korur.
+/// bu, API kotalarını korur. Süre dolduktan sonra API 429 ya da 5xx
+/// dönerse önbellekteki son cevap kullanılır.
 class JsonFetcher {
   JsonFetcher({
     required this.source,
@@ -62,6 +63,14 @@ class JsonFetcher {
           ? response.body.substring(0, 300)
           : response.body;
       debugPrint('[$source] HTTP ${response.statusCode} · ${uri.path} · $snippet');
+    }
+
+    // Kota (429) ya da sunucu (5xx) hatasında, süresi dolmuş da olsa
+    // önbellekte bu isteğin eski cevabı varsa onu göster; ekran boş kalmasın.
+    final code = response.statusCode;
+    if (cached != null && (code == 429 || _isTemporary(code))) {
+      debugPrint('[$source] HTTP $code · önbellekteki son veri kullanılıyor');
+      return cached.body;
     }
 
     switch (response.statusCode) {

@@ -16,6 +16,7 @@ import 'package:arsiv_app/services/app_services.dart';
 import 'package:arsiv_app/services/auth_service.dart';
 import 'package:arsiv_app/services/content_service.dart';
 import 'package:arsiv_app/services/google_books_service.dart';
+import 'package:arsiv_app/services/http_json.dart';
 import 'package:arsiv_app/services/library_store.dart';
 import 'package:arsiv_app/services/rawg_service.dart';
 import 'package:arsiv_app/services/sample_data.dart';
@@ -216,6 +217,131 @@ void main() {
       final client = MockClient((_) async => http.Response('', 429));
       expect(
         GoogleBooksService(client: client, apiKey: '').getPopular(),
+        throwsA(isA<ContentServiceException>()),
+      );
+    });
+
+    test('getDetails /volumes/{id} ile yazar, sayfa ve açıklamayı ekler',
+        () async {
+      final client = MockClient((request) async {
+        expect(request.url.path, '/books/v1/volumes/abc');
+        return jsonResponse({
+          'id': 'abc',
+          'volumeInfo': {
+            'title': 'Dune',
+            'authors': ['Frank Herbert', 'Brian Herbert'],
+            'pageCount': 896,
+            'averageRating': 4.0,
+            'description': '<p>Tam <b>açıklama</b></p>',
+            'categories': ['Fiction / Science Fiction / General'],
+            'imageLinks': {
+              'thumbnail': 'http://books.google.com/t.jpg',
+              'large': 'http://books.google.com/l.jpg&edge=curl',
+            },
+          },
+        });
+      });
+      const listItem = ContentItem(
+        id: 'gb_abc',
+        type: ContentType.book,
+        title: 'Dune',
+        year: 1965,
+        rating: 0,
+        genres: ['Kitap'],
+        description: 'Kısa',
+        meta: '',
+        artColors: [],
+      );
+
+      final detail = await GoogleBooksService(client: client, apiKey: '')
+          .getDetails(listItem);
+
+      expect(detail.creator, 'Frank Herbert, Brian Herbert');
+      expect(detail.length, 896);
+      expect(detail.lengthLabel, '896 sayfa');
+      expect(detail.description, 'Tam açıklama');
+      expect(detail.rating, 8.0);
+      expect(detail.genres, ['Science Fiction']);
+      expect(detail.imageUrl, 'https://books.google.com/l.jpg');
+      expect(detail.title, 'Dune'); // değişmeyen alanlar korunur
+    });
+
+    test('getDetails başka kaynağın öğesinde istek atmaz', () async {
+      final client = MockClient((_) async => fail('istek atılmamalı'));
+      final film = SampleData.films.first;
+      final result = await GoogleBooksService(client: client, apiKey: '')
+          .getDetails(film);
+      expect(result, same(film));
+    });
+
+    test('sayfalama startIndex parametresiyle yapılır', () async {
+      final starts = <String?>[];
+      final client = MockClient((request) async {
+        starts.add(request.url.queryParameters['startIndex']);
+        return jsonResponse({'items': []});
+      });
+      final service = GoogleBooksService(client: client, apiKey: '');
+      await service.search('dune');
+      await service.search('dune', page: 3);
+      expect(starts, ['0', '40']);
+    });
+
+    test('popülerin 2. sayfası 1. sayfada sonuç veren sorguyla istenir',
+        () async {
+      final requests = <String>[];
+      final client = MockClient((request) async {
+        final q = request.url.queryParameters['q']!;
+        final start = request.url.queryParameters['startIndex']!;
+        requests.add('$q@$start');
+        if (q == 'roman') return jsonResponse({'items': []});
+        return jsonResponse({
+          'items': [
+            {
+              'id': 'n$start',
+              'volumeInfo': {'title': 'Novel $start'},
+            },
+          ],
+        });
+      });
+      final service = GoogleBooksService(client: client, apiKey: '');
+      final page1 = await service.getPopular();
+      final page2 = await service.getPopular(page: 2);
+      expect(page1.single.title, 'Novel 0');
+      expect(page2.single.title, 'Novel 20');
+      expect(requests, ['roman@0', 'novel@0', 'novel@20']);
+    });
+  });
+
+  group('JsonFetcher', () {
+    test('süresi dolan önbellek 429 gelince yedek olarak kullanılır', () async {
+      var calls = 0;
+      final client = MockClient((_) async {
+        calls++;
+        return calls == 1
+            ? jsonResponse({'ok': true})
+            : http.Response('', 429);
+      });
+      final fetcher = JsonFetcher(
+        source: 'Test',
+        client: client,
+        cacheFor: Duration.zero,
+        retries: 0,
+      );
+      final uri = Uri.https('example.com', '/x');
+      expect(await fetcher.get(uri), {'ok': true});
+      expect(await fetcher.get(uri), {'ok': true}); // 429, önbellekten
+      expect(calls, 2);
+    });
+
+    test('önbellek yoksa 503 hata olarak iletilir', () async {
+      final client = MockClient((_) async => http.Response('', 503));
+      final fetcher = JsonFetcher(
+        source: 'Test',
+        client: client,
+        retries: 0,
+      );
+      expect(
+        fetcher.get(Uri.https('example.com', '/y')),
         throwsA(isA<ContentServiceException>()),
       );
     });
