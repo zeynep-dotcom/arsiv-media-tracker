@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:arsiv_app/core/auth_gate.dart';
 import 'package:arsiv_app/core/theme/app_theme.dart';
 import 'package:arsiv_app/models/content_item.dart';
 import 'package:arsiv_app/models/content_type.dart';
@@ -84,18 +85,21 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               AsyncContentRow(
                 title: 'Popüler Filmler',
                 future: _films,
+                loadPage: (page) => AppServices.films.getPopular(page: page),
                 fallback: SampleData.films,
               ),
             if (_show(ContentType.book))
               AsyncContentRow(
                 title: 'Çok Okunan Kitaplar',
                 future: _books,
+                loadPage: (page) => AppServices.books.getPopular(page: page),
                 fallback: SampleData.books,
               ),
             if (_show(ContentType.game))
               AsyncContentRow(
                 title: 'Trend Oyunlar',
                 future: _games,
+                loadPage: (page) => AppServices.games.getPopular(page: page),
                 fallback: SampleData.games,
               ),
             const _Attribution(),
@@ -111,11 +115,11 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: Row(
         children: [
-          Text(
+          const Text(
             'ARŞİV',
             style: TextStyle(
               color: AppColors.red,
@@ -124,13 +128,18 @@ class _Header extends StatelessWidget {
               letterSpacing: 1.2,
             ),
           ),
-          Spacer(),
-          CircleAvatar(
-            radius: 17,
-            backgroundColor: AppColors.cardHigh,
-            child: Text(
-              'A',
-              style: TextStyle(fontWeight: FontWeight.w700, color: Colors.white),
+          const Spacer(),
+          // Hesabım ekranını açar.
+          GestureDetector(
+            onTap: () => openProfile(context),
+            child: const CircleAvatar(
+              radius: 17,
+              backgroundColor: AppColors.cardHigh,
+              child: Text(
+                'A',
+                style:
+                    TextStyle(fontWeight: FontWeight.w700, color: Colors.white),
+              ),
             ),
           ),
         ],

@@ -8,8 +8,21 @@ import 'package:arsiv_app/widgets/content_card.dart';
 import 'package:arsiv_app/widgets/poster_art.dart';
 
 /// 03 · Kütüphanem: İzlenecek, Okunan, Oynanan, Favoriler sekmeleri.
-class LibraryScreen extends StatelessWidget {
+/// Sekmelerin altındaki çiplerle duruma göre filtrelenir ve sıralanır.
+class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
+
+  @override
+  State<LibraryScreen> createState() => _LibraryScreenState();
+}
+
+class _LibraryScreenState extends State<LibraryScreen> {
+  /// null = Tümü
+  LibraryStatus? _status;
+  LibrarySort _sort = LibrarySort.recent;
+
+  List<LibraryEntry> _apply(List<LibraryEntry> entries) =>
+      LibraryStore.filterAndSort(entries, status: _status, sort: _sort);
 
   @override
   Widget build(BuildContext context) {
@@ -43,21 +56,109 @@ class LibraryScreen extends StatelessWidget {
                 Tab(text: 'Favoriler'),
               ],
             ),
+            const SizedBox(height: 10),
+            _ChipRow<LibraryStatus?>(
+              options: const [
+                null,
+                LibraryStatus.planned,
+                LibraryStatus.inProgress,
+                LibraryStatus.done,
+                LibraryStatus.dropped,
+              ],
+              selected: _status,
+              labelOf: (s) => switch (s) {
+                null => 'Tümü',
+                LibraryStatus.planned => 'Planlandı',
+                LibraryStatus.inProgress => 'Devam ediyor',
+                LibraryStatus.done => 'Tamamlandı',
+                LibraryStatus.dropped => 'Yarım kaldı',
+              },
+              onChanged: (s) => setState(() => _status = s),
+            ),
+            const SizedBox(height: 8),
+            _ChipRow<LibrarySort>(
+              leading: const Icon(Icons.sort,
+                  size: 18, color: AppColors.textSecondary),
+              options: LibrarySort.values,
+              selected: _sort,
+              labelOf: (s) => s.label,
+              onChanged: (s) => setState(() => _sort = s),
+            ),
             Expanded(
               child: ListenableBuilder(
                 listenable: store,
                 builder: (context, _) => TabBarView(
                   children: [
-                    _EntryList(entries: store.watchList()),
-                    _EntryList(entries: store.readList()),
-                    _EntryList(entries: store.playList()),
-                    _EntryList(entries: store.favorites()),
+                    _EntryList(entries: _apply(store.watchList())),
+                    _EntryList(entries: _apply(store.readList())),
+                    _EntryList(entries: _apply(store.playList())),
+                    _EntryList(entries: _apply(store.favorites())),
                   ],
                 ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Yatay kaydırmalı tek seçimli çip satırı (Keşfet'teki tür çipleriyle
+/// aynı görünüm).
+class _ChipRow<T> extends StatelessWidget {
+  const _ChipRow({
+    required this.options,
+    required this.selected,
+    required this.labelOf,
+    required this.onChanged,
+    this.leading,
+  });
+
+  final List<T> options;
+  final T selected;
+  final String Function(T) labelOf;
+  final ValueChanged<T> onChanged;
+  final Widget? leading;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 34,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        children: [
+          if (leading != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Center(child: leading),
+            ),
+          for (final option in options)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                label: Text(labelOf(option)),
+                selected: option == selected,
+                showCheckmark: false,
+                onSelected: (_) => onChanged(option),
+                labelStyle: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: option == selected ? Colors.black : Colors.white,
+                ),
+                selectedColor: Colors.white,
+                backgroundColor: AppColors.background,
+                side: BorderSide(
+                  color: option == selected
+                      ? Colors.white
+                      : AppColors.divider,
+                ),
+                shape: const StadiumBorder(),
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+        ],
       ),
     );
   }

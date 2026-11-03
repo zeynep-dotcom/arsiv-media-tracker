@@ -11,10 +11,36 @@ import 'package:arsiv_app/widgets/poster_art.dart';
 import 'package:arsiv_app/widgets/type_badge.dart';
 
 /// 02 · Detay: büyük afiş, bilgiler, kütüphaneye ekleme, benzer içerikler.
-class DetailScreen extends StatelessWidget {
+/// Açılınca kart bilgisiyle başlar; servisten detay (tam açıklama,
+/// yönetmen/yazar/geliştirici, süre/sayfa) gelince ekran güncellenir.
+class DetailScreen extends StatefulWidget {
   const DetailScreen({super.key, required this.item});
 
   final ContentItem item;
+
+  @override
+  State<DetailScreen> createState() => _DetailScreenState();
+}
+
+class _DetailScreenState extends State<DetailScreen> {
+  late ContentItem item = widget.item;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDetails();
+  }
+
+  Future<void> _loadDetails() async {
+    try {
+      final detailed =
+          await AppServices.forType(widget.item.type).getDetails(widget.item);
+      if (mounted) setState(() => item = detailed);
+    } catch (e) {
+      // Detay gelmezse kart bilgisi gösterilmeye devam eder.
+      debugPrint('[Detay] ${widget.item.id} detayı alınamadı · $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -92,6 +118,18 @@ class DetailScreen extends StatelessWidget {
                       item.detailInfo,
                       style: const TextStyle(color: AppColors.textSecondary),
                     ),
+                    if (item.creator != null || item.lengthLabel != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        [
+                          if (item.creator != null)
+                            '${item.creatorLabel}: ${item.creator}',
+                          if (item.lengthLabel != null) item.lengthLabel!,
+                        ].join(' · '),
+                        style:
+                            const TextStyle(color: AppColors.textSecondary),
+                      ),
+                    ],
                     const SizedBox(height: 10),
                     Row(
                       children: [
@@ -218,6 +256,15 @@ class DetailScreen extends StatelessWidget {
                         ),
                       ),
                     ],
+                    if (entry != null &&
+                        entry.status == LibraryStatus.inProgress) ...[
+                      const SizedBox(height: 16),
+                      _ProgressSlider(
+                        progress: entry.progress,
+                        onChangeEnd: (value) =>
+                            store.setProgress(item, value),
+                      ),
+                    ],
                     const SizedBox(height: 18),
                     Text(
                       item.description,
@@ -226,7 +273,7 @@ class DetailScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              SliverToBoxAdapter(child: _SimilarRow(item: item)),
+              SliverToBoxAdapter(child: _SimilarRow(item: widget.item)),
             ],
           );
         },
@@ -304,6 +351,59 @@ class _OutlineAction extends StatelessWidget {
   }
 }
 
+/// İlerleme çubuğu. Sürüklerken yalnızca ekrandaki değer değişir; parmak
+/// kalkınca [onChangeEnd] bir kez çağrılır, böylece Firestore'a her adımda
+/// değil tek seferde yazılır.
+class _ProgressSlider extends StatefulWidget {
+  const _ProgressSlider({required this.progress, required this.onChangeEnd});
+
+  final double progress;
+  final ValueChanged<double> onChangeEnd;
+
+  @override
+  State<_ProgressSlider> createState() => _ProgressSliderState();
+}
+
+class _ProgressSliderState extends State<_ProgressSlider> {
+  double? _dragValue;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = (_dragValue ?? widget.progress).clamp(0.0, 1.0).toDouble();
+    final percent = (value * 100).round();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text(
+              'İlerleme',
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            ),
+            const Spacer(),
+            Text(
+              '%$percent',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+        Slider(
+          value: value,
+          divisions: 20,
+          label: '%$percent',
+          activeColor: AppColors.red,
+          inactiveColor: AppColors.divider,
+          onChanged: (v) => setState(() => _dragValue = v),
+          onChangeEnd: (v) {
+            setState(() => _dragValue = null);
+            widget.onChangeEnd(v);
+          },
+        ),
+      ],
+    );
+  }
+}
 
 /// Benzer içerikler: aynı türdeki popüler içerikler, ilgili API'den.
 class _SimilarRow extends StatefulWidget {

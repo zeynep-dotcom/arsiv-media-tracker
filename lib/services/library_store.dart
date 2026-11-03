@@ -1,18 +1,99 @@
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 import 'package:arsiv_app/models/content_item.dart';
 import 'package:arsiv_app/models/content_type.dart';
 import 'package:arsiv_app/models/library_entry.dart';
 
-/// Kullanıcının kütüphanesini bellekte tutar ve boş başlar.
-/// Akif'in Firestore servisi hazır olunca kayıtlar users/{uid}/library
-/// koleksiyonuna yazılacak; ekranlar bu sınıfı kullanmaya devam eder.
+/// Kütüphanem'deki sıralama seçenekleri.
+enum LibrarySort {
+  recent('Son eklenen'),
+  rating('Puana göre'),
+  name('İsme göre');
+
+  const LibrarySort(this.label);
+  final String label;
+}
+
+/// Kullanıcının kütüphanesi. Oturum açılınca (AuthGate [start] çağırır)
+/// users/{uid}/library koleksiyonunu dinler; her değişiklik önce bellekte
+/// yapılır, sonra Firestore'a yazılır. Oturum yokken yalnızca bellekte tutar.
 class LibraryStore extends ChangeNotifier {
   LibraryStore._();
 
   static final LibraryStore instance = LibraryStore._();
 
   final Map<String, LibraryEntry> _entries = {};
+
+  String? _uid;
+  CollectionReference<Map<String, dynamic>>? _collection;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _subscription;
+
+  /// [uid] kullanıcısının kütüphanesini [collection]'dan yükler ve dinler.
+  /// İlk liste geldiğinde tamamlanır. Aynı kullanıcı için tekrar çağrılırsa
+  /// bir şey yapmaz.
+  Future<void> start(
+    String uid,
+    CollectionReference<Map<String, dynamic>> collection,
+  ) {
+    if (_uid == uid) return Future.value();
+    stop();
+    _uid = uid;
+    _collection = collection;
+
+    final firstLoad = Completer<void>();
+    _subscription = collection.snapshots().listen(
+      (snapshot) {
+        _entries
+          ..clear()
+          ..addEntries(snapshot.docs.map(_fromDoc).nonNulls);
+        notifyListeners();
+        if (!firstLoad.isCompleted) firstLoad.complete();
+      },
+      onError: (Object e) {
+        debugPrint('[Kütüphane] users/$uid/library okunamadı · $e');
+        if (!firstLoad.isCompleted) firstLoad.complete();
+      },
+    );
+    return firstLoad.future;
+  }
+
+  /// Dinlemeyi bırakır ve bellekteki listeyi boşaltır (çıkış yapılınca).
+  void stop() {
+    _subscription?.cancel();
+    _subscription = null;
+    _collection = null;
+    _uid = null;
+    _entries.clear();
+    notifyListeners();
+  }
+
+  /// Bozuk bir belge tüm listeyi düşürmesin diye atlanır.
+  static MapEntry<String, LibraryEntry>? _fromDoc(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    try {
+      return MapEntry(doc.id, LibraryEntry.fromMap(doc.data()));
+    } catch (e) {
+      debugPrint('[Kütüphane] ${doc.id} okunamadı · $e');
+      return null;
+    }
+  }
+
+  void _save(LibraryEntry entry) {
+    _collection
+        ?.doc(entry.item.id)
+        .set(entry.toMap())
+        .catchError((Object e) => debugPrint(
+            '[Kütüphane] ${entry.item.id} kaydedilemedi · $e'));
+  }
+
+  void _delete(String itemId) {
+    _collection?.doc(itemId).delete().catchError(
+        (Object e) => debugPrint('[Kütüphane] $itemId silinemedi · $e'));
+  }
 
   List<LibraryEntry> get entries => _entries.values.toList();
 
@@ -24,23 +105,26 @@ class LibraryStore extends ChangeNotifier {
       _entries.putIfAbsent(item.id, () => LibraryEntry(item: item));
 
   void add(ContentItem item) {
-    _ensure(item);
+    _save(_ensure(item));
     notifyListeners();
   }
 
   void remove(ContentItem item) {
     _entries.remove(item.id);
+    _delete(item.id);
     notifyListeners();
   }
 
   void toggleFavorite(ContentItem item) {
     final entry = _ensure(item);
     entry.favorite = !entry.favorite;
+    _save(entry);
     notifyListeners();
   }
 
   void rate(ContentItem item, int rating) {
-    _ensure(item).userRating = rating;
+    final entry = _ensure(item)..userRating = rating;
+    _save(entry);
     notifyListeners();
   }
 
@@ -62,6 +146,27 @@ class LibraryStore extends ChangeNotifier {
       case LibraryStatus.dropped:
         entry.completedAt = null;
     }
+    _save(entry);
+    notifyListeners();
+  }
+
+  /// Detay ekranındaki ilerleme çubuğu (0-1). Durum ilerlemeyle uyumlu
+  /// tutulur: %100 olunca "Bitti" ve tamamlanma tarihi; %100'den geri
+  /// çekilince ya da planlanmış bir içerik ilerleyince "Devam ediyor".
+  void setProgress(ContentItem item, double progress) {
+    final entry = _ensure(item);
+    entry.progress = progress.clamp(0.0, 1.0).toDouble();
+    if (entry.progress == 1) {
+      entry.status = LibraryStatus.done;
+      entry.completedAt ??= DateTime.now();
+    } else {
+      if (entry.status == LibraryStatus.done ||
+          (entry.status == LibraryStatus.planned && entry.progress > 0)) {
+        entry.status = LibraryStatus.inProgress;
+      }
+      entry.completedAt = null;
+    }
+    _save(entry);
     notifyListeners();
   }
 
@@ -83,4 +188,38 @@ class LibraryStore extends ChangeNotifier {
       entries.where((e) => e.item.type == ContentType.game).toList();
 
   List<LibraryEntry> favorites() => entries.where((e) => e.favorite).toList();
+
+  /// Kütüphanem çipleri: [status] verilirse yalnızca o durumdakiler
+  /// (null = Tümü), ardından [sort]'a göre sıralanır.
+  /// - Son eklenen: en yeni eklenen başta.
+  /// - Puana göre: kullanıcının puanı yüksek olan başta; puanlanmamışlar
+  ///   sonda (aralarında API puanına göre).
+  /// - İsme göre: A'dan Z'ye.
+  static List<LibraryEntry> filterAndSort(
+    List<LibraryEntry> entries, {
+    LibraryStatus? status,
+    LibrarySort sort = LibrarySort.recent,
+  }) {
+    final result = [
+      for (final e in entries)
+        if (status == null || e.status == status) e,
+    ];
+    int byName(LibraryEntry a, LibraryEntry b) =>
+        a.item.title.toLowerCase().compareTo(b.item.title.toLowerCase());
+
+    switch (sort) {
+      case LibrarySort.recent:
+        result.sort((a, b) => b.addedAt.compareTo(a.addedAt));
+      case LibrarySort.rating:
+        result.sort((a, b) {
+          final byUser = (b.userRating ?? 0).compareTo(a.userRating ?? 0);
+          if (byUser != 0) return byUser;
+          final byApi = b.item.rating.compareTo(a.item.rating);
+          return byApi != 0 ? byApi : byName(a, b);
+        });
+      case LibrarySort.name:
+        result.sort(byName);
+    }
+    return result;
+  }
 }
