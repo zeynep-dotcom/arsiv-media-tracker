@@ -28,8 +28,11 @@ abstract class ContentService {
 /// Servis bir hata verdiğinde fırlatılır; ekran kullanıcıya anlaşılır bir
 /// mesaj gösterir.
 class ContentServiceException implements Exception {
-  const ContentServiceException(this.message);
+  const ContentServiceException(this.message, {this.statusCode});
   final String message;
+
+  /// Hata bir HTTP yanıtından geldiyse durum kodu (ör. 404); yoksa null.
+  final int? statusCode;
 
   @override
   String toString() => message;

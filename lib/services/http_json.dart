@@ -70,18 +70,22 @@ class JsonFetcher {
       case 401:
       case 403:
         throw ContentServiceException(
-            '$source anahtarı geçersiz ya da eksik (env.json).');
+            '$source anahtarı geçersiz ya da eksik (env.json).',
+            statusCode: response.statusCode);
       case 429:
-        throw ContentServiceException('$source istek sınırı aşıldı.');
+        throw ContentServiceException('$source istek sınırı aşıldı.',
+            statusCode: response.statusCode);
       case 500:
       case 502:
       case 503:
       case 504:
         throw ContentServiceException(
-            '$source geçici olarak yanıt vermiyor (${response.statusCode}).');
+            '$source geçici olarak yanıt vermiyor (${response.statusCode}).',
+            statusCode: response.statusCode);
       default:
         throw ContentServiceException(
-            '$source hatası (${response.statusCode}).');
+            '$source hatası (${response.statusCode}).',
+            statusCode: response.statusCode);
     }
 
     final dynamic body;

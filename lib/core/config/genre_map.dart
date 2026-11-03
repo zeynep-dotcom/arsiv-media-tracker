@@ -1,8 +1,8 @@
 /// Türkçe tür adlarını her API'nin anladığı değere çeviren tablo (Ahmet).
 ///
 /// TMDB türleri sayı kimliğiyle, Google Books konularla (subject), RAWG ise
-/// tür (genres) ya da etiketle (tags) arar. RAWG değerleri Enes'in deneme
-/// istekleriyle doğrulanmalı.
+/// tür (genres) ya da etiketle (tags) arar. RAWG değerleri Enes tarafından
+/// /api/tags/{slug} ve /api/genres/{slug} istekleriyle doğrulandı.
 class Genre {
   const Genre({
     required this.label,

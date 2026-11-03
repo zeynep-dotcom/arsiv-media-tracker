@@ -143,7 +143,14 @@ class SampleData {
       meta: 'PC · PlayStation',
       description:
           'Sürekli değişen neon bir labirentte, her bölüm yeni bir kuralla '
-          'başlar.',
+          'başlar.\n\n'
+          'Duvarlar her adımında yer değiştirir; çıkışa ulaşmak için ışık '
+          'köprülerini doğru sırayla yakman, aynaları çevirmen ve zamanı '
+          'kısa süreliğine geri sarman gerekir.\n\n'
+          'Altı bölge ve 120\'den fazla bulmacadan oluşan oyunda gizli '
+          'odalar, labirentin neden kurulduğunu yavaş yavaş anlatır.',
+      creator: 'Pırıltı Oyun Stüdyosu',
+      length: 14,
       artColors: [Color(0xFFC04CFD), Color(0xFF3A1052)],
     ),
     ContentItem(
@@ -155,7 +162,16 @@ class SampleData {
       genres: ['Strateji'],
       meta: 'PC',
       description:
-          'Terk edilmiş bir maden vadisinde kendi kasabanı kur ve kışa hazırlan.',
+          'Terk edilmiş bir maden vadisinde kendi kasabanı kur ve kışa '
+          'hazırlan.\n\n'
+          'Madenleri yeniden aç, demir ve kömürü işleyip kasabanın '
+          'ihtiyaçlarını karşıla. Her mevsim farklı bir sorun getirir: '
+          'yazın kuraklık, sonbaharda göç eden işçiler, kışın ise donan '
+          'yollar.\n\n'
+          'Kasaba meclisinin kararları ve komşu vadilerle kurduğun ticaret '
+          'yolları, kışı kaç kişiyle karşılayacağını belirler.',
+      creator: 'Kuzey Atölye',
+      length: 40,
       artColors: [Color(0xFF84CC16), Color(0xFF26380A)],
     ),
     ContentItem(
@@ -168,7 +184,14 @@ class SampleData {
       meta: 'PlayStation · Xbox',
       description:
           'Asansörün durmadığı yedinci katta neler olduğunu yalnızca sen '
-          'öğrenebilirsin.',
+          'öğrenebilirsin.\n\n'
+          'Gece bekçisi olarak işe başladığın eski bir iş hanında ışıklar '
+          'her gece aynı saatte söner. Yedinci kata çıkan tek yol, yıllardır '
+          'kilitli duran yangın merdivenidir.\n\n'
+          'Elinde yalnızca bir el feneri ve eski bir telsiz var; duyduğun '
+          'seslerin hangisinin gerçek olduğuna sen karar vereceksin.',
+      creator: 'Gölge Yapım',
+      length: 8,
       artColors: [Color(0xFFEC4899), Color(0xFF4A0F2C)],
     ),
     ContentItem(
@@ -180,7 +203,15 @@ class SampleData {
       genres: ['Bilim kurgu', 'Macera'],
       meta: 'PC · Switch',
       description:
-          'Küçük bir uzay gemisiyle galaksinin kenarındaki kayıp yıldızı ara.',
+          'Küçük bir uzay gemisiyle galaksinin kenarındaki kayıp yıldızı '
+          'ara.\n\n'
+          'Haritası olmayan bir bölgede gezegenlere in, yakıt ve parça '
+          'topla, gemini geliştir. Karşılaştığın uzaylı toplulukların her '
+          'biri kayıp yıldız hakkında farklı bir hikâye anlatır.\n\n'
+          'Her yolculuk rastgele oluşturulan bir galakside geçer; verdiğin '
+          'kararlar yol arkadaşlarının kaderini de değiştirir.',
+      creator: 'Yörünge Games',
+      length: 25,
       artColors: [Color(0xFF22D3EE), Color(0xFF0B3440)],
     ),
   ];
