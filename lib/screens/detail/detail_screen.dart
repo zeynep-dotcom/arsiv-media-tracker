@@ -7,6 +7,7 @@ import 'package:arsiv_app/models/library_entry.dart';
 import 'package:arsiv_app/services/app_services.dart';
 import 'package:arsiv_app/services/library_store.dart';
 import 'package:arsiv_app/widgets/content_row.dart';
+import 'package:arsiv_app/widgets/film_extras_section.dart';
 import 'package:arsiv_app/widgets/poster_art.dart';
 import 'package:arsiv_app/widgets/type_badge.dart';
 
@@ -270,6 +271,7 @@ class _DetailScreenState extends State<DetailScreen> {
                       item.description,
                       style: const TextStyle(height: 1.5, fontSize: 14),
                     ),
+                    FilmExtrasSection(item: item),
                   ],
                 ),
               ),

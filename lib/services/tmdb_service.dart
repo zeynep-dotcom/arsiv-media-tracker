@@ -8,6 +8,15 @@ import 'package:arsiv_app/services/content_service.dart';
 import 'package:arsiv_app/services/google_books_service.dart';
 import 'package:arsiv_app/services/http_json.dart';
 
+/// Türkiye'de bir filmin izlenebileceği platform (JustWatch kaynaklı).
+class WatchProvider {
+  const WatchProvider({required this.id, required this.name, this.logoUrl});
+
+  final int id;
+  final String name;
+  final String? logoUrl;
+}
+
 /// TMDB film servisi (Ali Kağan).
 ///
 /// TMDB anahtarı env.json içindeki TMDB_TOKEN alanından gelir. İki tür de
@@ -110,6 +119,96 @@ class TmdbService implements ContentService {
       genres: genres.isEmpty ? null : genres.take(2).toList(),
       rating: rating != null && rating > 0 ? rating : null,
     );
+  }
+
+  /// /3/movie/{id}/watch/providers uç noktasından Türkiye (TR) için
+  /// izleme platformlarını (abonelik, ücretsiz, kiralama, satın alma) getirir.
+  /// TMDB'den gelmeyen öğelerde ya da sonuç yoksa boş liste döner.
+  Future<List<WatchProvider>> getWatchProviders(ContentItem item) async {
+    if (!item.id.startsWith('tmdb_')) return const [];
+    if (_token.isEmpty) return const [];
+    final movieId = item.id.substring(5);
+    final uri = Uri.https(
+      'api.themoviedb.org',
+      '/3/movie/$movieId/watch/providers',
+      {if (_isShortKey) 'api_key': _token},
+    );
+    final body = await _http.get(uri, headers: {
+      if (!_isShortKey) 'Authorization': 'Bearer $_token',
+      'Accept': 'application/json',
+    });
+    final results = body is Map ? body['results'] : null;
+    final tr = results is Map ? results['TR'] : null;
+    if (tr is! Map) return const [];
+
+    final seen = <int>{};
+    final providers = <WatchProvider>[];
+    for (final bucket in const ['flatrate', 'free', 'ads', 'rent', 'buy']) {
+      for (final raw in (tr[bucket] as List?) ?? const []) {
+        if (raw is! Map) continue;
+        final id = (raw['provider_id'] as num?)?.toInt();
+        final name = (raw['provider_name'] as String?)?.trim();
+        final logo = (raw['logo_path'] as String?)?.trim();
+        if (id == null || name == null || name.isEmpty) continue;
+        if (seen.add(id)) {
+          providers.add(WatchProvider(
+            id: id,
+            name: name,
+            logoUrl: logo == null || logo.isEmpty ? null : '$_imageBase/w92$logo',
+          ));
+        }
+      }
+    }
+    return providers;
+  }
+
+  /// /3/movie/{id}/videos uç noktasından filmin YouTube fragman bağlantısını
+  /// bulur. Önce Türkçe (`tr-TR`) sonuçlara bakar, bulamazsa tüm dillere
+  /// (`include_video_language=tr,en,null`) bakar. Fragman yoksa null döner.
+  Future<Uri?> getTrailerUrl(ContentItem item) async {
+    if (!item.id.startsWith('tmdb_')) return null;
+    if (_token.isEmpty) return null;
+    final movieId = item.id.substring(5);
+    final uri = Uri.https(
+      'api.themoviedb.org',
+      '/3/movie/$movieId/videos',
+      {
+        'language': 'tr-TR',
+        'include_video_language': 'tr,en,null',
+        if (_isShortKey) 'api_key': _token,
+      },
+    );
+    final body = await _http.get(uri, headers: {
+      if (!_isShortKey) 'Authorization': 'Bearer $_token',
+      'Accept': 'application/json',
+    });
+    final results = body is Map ? body['results'] : null;
+    if (results is! List || results.isEmpty) return null;
+
+    final videos = <Map<dynamic, dynamic>>[];
+    for (final v in results) {
+      if (v is Map && v['site'] == 'YouTube') {
+        final key = (v['key'] as String?)?.trim();
+        if (key != null && key.isNotEmpty) videos.add(v);
+      }
+    }
+    if (videos.isEmpty) return null;
+
+    Map<dynamic, dynamic>? pick(bool Function(Map<dynamic, dynamic>) test) {
+      for (final v in videos) {
+        if (test(v)) return v;
+      }
+      return null;
+    }
+
+    final chosen =
+        pick((v) => v['type'] == 'Trailer' && v['official'] == true) ??
+        pick((v) => v['type'] == 'Trailer') ??
+        pick((v) => v['type'] == 'Teaser') ??
+        videos.first;
+
+    final key = (chosen['key'] as String).trim();
+    return Uri.https('www.youtube.com', '/watch', {'v': key});
   }
 
   Future<List<ContentItem>> _fetch(
