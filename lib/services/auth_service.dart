@@ -99,6 +99,10 @@ class AuthService {
     return doc.data()?['plan'] as String? ?? 'free';
   }
 
+  /// Kullanıcı belgesi: users/{uid} (tür tercihleri burada tutulur).
+  DocumentReference<Map<String, dynamic>> userDoc(String uid) =>
+      _firestore.collection('users').doc(uid);
+
   AuthException _toAuthException(FirebaseException e) =>
       AuthException(messageFor(e.code), code: e.code);
 

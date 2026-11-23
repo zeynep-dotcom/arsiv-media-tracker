@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:arsiv_app/core/auth_gate.dart';
@@ -6,7 +7,9 @@ import 'package:arsiv_app/models/content_item.dart';
 import 'package:arsiv_app/models/content_type.dart';
 import 'package:arsiv_app/services/app_services.dart';
 import 'package:arsiv_app/services/library_store.dart';
+import 'package:arsiv_app/services/recommendation_service.dart';
 import 'package:arsiv_app/services/sample_data.dart';
+import 'package:arsiv_app/services/user_preferences.dart';
 import 'package:arsiv_app/widgets/content_card.dart';
 import 'package:arsiv_app/widgets/content_row.dart';
 import 'package:arsiv_app/widgets/poster_art.dart';
@@ -26,17 +29,53 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   late Future<List<ContentItem>> _films;
   late Future<List<ContentItem>> _books;
   late Future<List<ContentItem>> _games;
+  late Future<ContentItem?> _pick;
+
+  /// Öneri hesaplanırken kullanılan tür tercihleri; değişince yeniden
+  /// hesaplanır ("Hangi türleri seversin?" kaydedilince).
+  List<String> _pickGenres = const [];
 
   @override
   void initState() {
     super.initState();
     _load();
+    UserPreferences.instance.addListener(_onPreferences);
+  }
+
+  @override
+  void dispose() {
+    UserPreferences.instance.removeListener(_onPreferences);
+    super.dispose();
   }
 
   void _load() {
     _films = AppServices.films.getPopular();
     _books = AppServices.books.getPopular();
     _games = AppServices.games.getPopular();
+    _pick = _loadPick();
+  }
+
+  void _onPreferences() {
+    if (listEquals(UserPreferences.instance.favoriteGenres, _pickGenres)) {
+      return;
+    }
+    setState(() => _pick = _loadPick());
+  }
+
+  /// "Bu haftanın önerisi": satırlar yüklendikten sonra kütüphane ve tür
+  /// tercihleriyle öneri motoru seçer.
+  Future<ContentItem?> _loadPick() async {
+    final lists = await Future.wait([
+      _films.catchError((_) => <ContentItem>[]),
+      _books.catchError((_) => <ContentItem>[]),
+      _games.catchError((_) => <ContentItem>[]),
+    ]);
+    _pickGenres = UserPreferences.instance.favoriteGenres;
+    return RecommendationService.loadWeeklyPick(
+      popular: [for (final list in lists) ...list],
+      library: LibraryStore.instance.entries,
+      favoriteGenres: _pickGenres,
+    );
   }
 
   Future<void> _refresh() async {
@@ -46,6 +85,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       _films.catchError((_) => <ContentItem>[]),
       _books.catchError((_) => <ContentItem>[]),
       _games.catchError((_) => <ContentItem>[]),
+      _pick.catchError((_) => null),
     ]);
   }
 
@@ -70,15 +110,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: FutureBuilder<List<ContentItem>>(
-                future: _films,
-                builder: (context, snapshot) {
-                  final films = snapshot.data;
-                  final item = (films != null && films.isNotEmpty)
-                      ? films.first
-                      : SampleData.featured;
-                  return _FeaturedCard(item: item);
-                },
+              child: FutureBuilder<ContentItem?>(
+                future: _pick,
+                builder: (context, snapshot) =>
+                    _FeaturedCard(item: snapshot.data ?? SampleData.featured),
               ),
             ),
             if (_show(ContentType.film))
@@ -137,8 +172,10 @@ class _Header extends StatelessWidget {
               backgroundColor: AppColors.cardHigh,
               child: Text(
                 'A',
-                style:
-                    TextStyle(fontWeight: FontWeight.w700, color: Colors.white),
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
               ),
             ),
           ),
@@ -194,7 +231,9 @@ class _FeaturedCard extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                        fontSize: 28, fontWeight: FontWeight.w900),
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                   Text(
                     [
@@ -202,6 +241,10 @@ class _FeaturedCard extends StatelessWidget {
                       if (item.genres.isNotEmpty) item.genres.join(', '),
                       if (item.hasRating) '★ ${item.rating.toStringAsFixed(1)}',
                     ].join(' · '),
+                    // Öneri her türden gelebilir; uzun tür listesi kartı
+                    // taşırmasın.
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                   const SizedBox(height: 12),
@@ -218,7 +261,8 @@ class _FeaturedCard extends StatelessWidget {
                           backgroundColor: Colors.white,
                           foregroundColor: Colors.black,
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(6)),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
                         ),
                       ),
                       ListenableBuilder(
@@ -226,18 +270,21 @@ class _FeaturedCard extends StatelessWidget {
                         builder: (context, _) {
                           final added = store.contains(item);
                           return FilledButton.icon(
-                            onPressed: () => added
-                                ? store.remove(item)
-                                : store.add(item),
-                            icon: Icon(added ? Icons.check : Icons.add,
-                                size: 18),
+                            onPressed: () =>
+                                added ? store.remove(item) : store.add(item),
+                            icon: Icon(
+                              added ? Icons.check : Icons.add,
+                              size: 18,
+                            ),
                             label: Text(added ? 'Listemde' : 'Listeme'),
                             style: FilledButton.styleFrom(
-                              backgroundColor:
-                                  Colors.white.withValues(alpha: 0.22),
+                              backgroundColor: Colors.white.withValues(
+                                alpha: 0.22,
+                              ),
                               foregroundColor: Colors.white,
                               shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(6)),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
                             ),
                           );
                         },
