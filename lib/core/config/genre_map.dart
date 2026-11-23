@@ -1,8 +1,8 @@
 /// Türkçe tür adlarını her API'nin anladığı değere çeviren tablo (Ahmet).
 ///
 /// TMDB türleri sayı kimliğiyle, Google Books konularla (subject), RAWG ise
-/// tür (genres) ya da etiketle (tags) arar. RAWG değerleri Enes'in deneme
-/// istekleriyle doğrulanmalı.
+/// tür (genres) ya da etiketle (tags) arar. RAWG değerleri Enes tarafından
+/// /api/tags/{slug} ve /api/genres/{slug} istekleriyle doğrulandı.
 class Genre {
   const Genre({
     required this.label,
@@ -82,6 +82,22 @@ class GenreMap {
       booksSubject: 'mystery',
       rawgParam: 'tags',
       rawgValue: 'mystery',
+    ),
+    Genre(
+      label: 'Dram',
+      aliases: ['dram', 'drama'],
+      tmdbId: 18,
+      booksSubject: 'drama',
+      rawgParam: 'tags',
+      rawgValue: 'drama',
+    ),
+    Genre(
+      label: 'Gerilim',
+      aliases: ['gerilim', 'thriller'],
+      tmdbId: 53,
+      booksSubject: 'thriller',
+      rawgParam: 'tags',
+      rawgValue: 'thriller',
     ),
   ];
 

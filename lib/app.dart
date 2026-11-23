@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:arsiv_app/core/auth_gate.dart';
 import 'package:arsiv_app/core/theme/app_theme.dart';
-import 'package:arsiv_app/screens/home_shell.dart';
 
 class ArsivApp extends StatelessWidget {
   const ArsivApp({super.key});
@@ -12,7 +12,7 @@ class ArsivApp extends StatelessWidget {
       title: 'ARŞİV',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark(),
-      home: const HomeShell(),
+      home: const AuthGate(),
     );
   }
 }

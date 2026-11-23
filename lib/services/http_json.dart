@@ -8,7 +8,8 @@ import 'package:arsiv_app/services/content_service.dart';
 
 /// Üç servisin ortak HTTP yardımcısı: zaman aşımı, hata mesajları ve
 /// kısa süreli önbellek. Aynı istek 5 dakika içinde tekrar gönderilmez;
-/// bu, API kotalarını korur.
+/// bu, API kotalarını korur. Süre dolduktan sonra API 429 ya da 5xx
+/// dönerse önbellekteki son cevap kullanılır.
 class JsonFetcher {
   JsonFetcher({
     required this.source,
@@ -64,24 +65,36 @@ class JsonFetcher {
       debugPrint('[$source] HTTP ${response.statusCode} · ${uri.path} · $snippet');
     }
 
+    // Kota (429) ya da sunucu (5xx) hatasında, süresi dolmuş da olsa
+    // önbellekte bu isteğin eski cevabı varsa onu göster; ekran boş kalmasın.
+    final code = response.statusCode;
+    if (cached != null && (code == 429 || _isTemporary(code))) {
+      debugPrint('[$source] HTTP $code · önbellekteki son veri kullanılıyor');
+      return cached.body;
+    }
+
     switch (response.statusCode) {
       case 200:
         break;
       case 401:
       case 403:
         throw ContentServiceException(
-            '$source anahtarı geçersiz ya da eksik (env.json).');
+            '$source anahtarı geçersiz ya da eksik (env.json).',
+            statusCode: response.statusCode);
       case 429:
-        throw ContentServiceException('$source istek sınırı aşıldı.');
+        throw ContentServiceException('$source istek sınırı aşıldı.',
+            statusCode: response.statusCode);
       case 500:
       case 502:
       case 503:
       case 504:
         throw ContentServiceException(
-            '$source geçici olarak yanıt vermiyor (${response.statusCode}).');
+            '$source geçici olarak yanıt vermiyor (${response.statusCode}).',
+            statusCode: response.statusCode);
       default:
         throw ContentServiceException(
-            '$source hatası (${response.statusCode}).');
+            '$source hatası (${response.statusCode}).',
+            statusCode: response.statusCode);
     }
 
     final dynamic body;

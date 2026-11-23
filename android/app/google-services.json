@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "151037579395",
+    "project_id": "arsiv-app-9c310",
+    "storage_bucket": "arsiv-app-9c310.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:151037579395:android:d5df18f7bba27acd1a0bb6",
+        "android_client_info": {
+          "package_name": "com.arsiv.arsiv_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBKdTgQ1lWUytjTgMITt3wDlIv4HSJY_qI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

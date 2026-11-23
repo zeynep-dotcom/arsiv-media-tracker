@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
+import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -11,8 +13,10 @@ import 'package:arsiv_app/models/content_item.dart';
 import 'package:arsiv_app/models/content_type.dart';
 import 'package:arsiv_app/models/library_entry.dart';
 import 'package:arsiv_app/services/app_services.dart';
+import 'package:arsiv_app/services/auth_service.dart';
 import 'package:arsiv_app/services/content_service.dart';
 import 'package:arsiv_app/services/google_books_service.dart';
+import 'package:arsiv_app/services/http_json.dart';
 import 'package:arsiv_app/services/library_store.dart';
 import 'package:arsiv_app/services/rawg_service.dart';
 import 'package:arsiv_app/services/sample_data.dart';
@@ -24,15 +28,24 @@ class FakeService implements ContentService {
   final List<ContentItem> items;
 
   @override
-  Future<List<ContentItem>> getPopular() async => items;
+  Future<List<ContentItem>> getPopular({int page = 1}) async =>
+      page == 1 ? items : const [];
 
   @override
-  Future<List<ContentItem>> search(String query) async => items
-      .where((b) => b.title.toLowerCase().contains(query.toLowerCase()))
-      .toList();
+  Future<List<ContentItem>> search(String query, {int page = 1}) async =>
+      page > 1
+          ? const []
+          : items
+              .where(
+                  (b) => b.title.toLowerCase().contains(query.toLowerCase()))
+              .toList();
 
   @override
-  Future<List<ContentItem>> getByGenre(Genre genre) async => items;
+  Future<List<ContentItem>> getByGenre(Genre genre, {int page = 1}) async =>
+      page == 1 ? items : const [];
+
+  @override
+  Future<ContentItem> getDetails(ContentItem item) async => item;
 }
 
 /// Testleri telefon boyutunda çalıştır (varsayılan 800x600 çok küçük).
@@ -50,7 +63,12 @@ void main() {
     AppServices.films = FakeService(SampleData.films);
     AppServices.books = FakeService(SampleData.books);
     AppServices.games = FakeService(SampleData.games);
-    LibraryStore.instance.clear();
+    LibraryStore.instance.stop();
+    // Uygulama AuthGate'ten açılır; testler giriş yapmış kullanıcıyla başlar.
+    AuthService.instance = AuthService(
+      auth: MockFirebaseAuth(signedIn: true),
+      firestore: FakeFirebaseFirestore(),
+    );
   });
 
   testWidgets('Alt menü dört ekran arasında geçiş yapar',
@@ -115,6 +133,9 @@ void main() {
       expect(GenreMap.match('korku')?.tmdbId, 27);
       expect(GenreMap.match('  KORKU ')?.booksSubject, 'horror');
       expect(GenreMap.match('Bilim kurgu')?.tmdbId, 878);
+      expect(GenreMap.match('Dram')?.tmdbId, 18);
+      expect(GenreMap.match('gerilim')?.booksSubject, 'thriller');
+      expect(GenreMap.all.length, 9);
       expect(GenreMap.match('Harry Potter'), isNull);
     });
   });
@@ -196,6 +217,131 @@ void main() {
       final client = MockClient((_) async => http.Response('', 429));
       expect(
         GoogleBooksService(client: client, apiKey: '').getPopular(),
+        throwsA(isA<ContentServiceException>()),
+      );
+    });
+
+    test('getDetails /volumes/{id} ile yazar, sayfa ve açıklamayı ekler',
+        () async {
+      final client = MockClient((request) async {
+        expect(request.url.path, '/books/v1/volumes/abc');
+        return jsonResponse({
+          'id': 'abc',
+          'volumeInfo': {
+            'title': 'Dune',
+            'authors': ['Frank Herbert', 'Brian Herbert'],
+            'pageCount': 896,
+            'averageRating': 4.0,
+            'description': '<p>Tam <b>açıklama</b></p>',
+            'categories': ['Fiction / Science Fiction / General'],
+            'imageLinks': {
+              'thumbnail': 'http://books.google.com/t.jpg',
+              'large': 'http://books.google.com/l.jpg&edge=curl',
+            },
+          },
+        });
+      });
+      const listItem = ContentItem(
+        id: 'gb_abc',
+        type: ContentType.book,
+        title: 'Dune',
+        year: 1965,
+        rating: 0,
+        genres: ['Kitap'],
+        description: 'Kısa',
+        meta: '',
+        artColors: [],
+      );
+
+      final detail = await GoogleBooksService(client: client, apiKey: '')
+          .getDetails(listItem);
+
+      expect(detail.creator, 'Frank Herbert, Brian Herbert');
+      expect(detail.length, 896);
+      expect(detail.lengthLabel, '896 sayfa');
+      expect(detail.description, 'Tam açıklama');
+      expect(detail.rating, 8.0);
+      expect(detail.genres, ['Science Fiction']);
+      expect(detail.imageUrl, 'https://books.google.com/l.jpg');
+      expect(detail.title, 'Dune'); // değişmeyen alanlar korunur
+    });
+
+    test('getDetails başka kaynağın öğesinde istek atmaz', () async {
+      final client = MockClient((_) async => fail('istek atılmamalı'));
+      final film = SampleData.films.first;
+      final result = await GoogleBooksService(client: client, apiKey: '')
+          .getDetails(film);
+      expect(result, same(film));
+    });
+
+    test('sayfalama startIndex parametresiyle yapılır', () async {
+      final starts = <String?>[];
+      final client = MockClient((request) async {
+        starts.add(request.url.queryParameters['startIndex']);
+        return jsonResponse({'items': []});
+      });
+      final service = GoogleBooksService(client: client, apiKey: '');
+      await service.search('dune');
+      await service.search('dune', page: 3);
+      expect(starts, ['0', '40']);
+    });
+
+    test('popülerin 2. sayfası 1. sayfada sonuç veren sorguyla istenir',
+        () async {
+      final requests = <String>[];
+      final client = MockClient((request) async {
+        final q = request.url.queryParameters['q']!;
+        final start = request.url.queryParameters['startIndex']!;
+        requests.add('$q@$start');
+        if (q == 'roman') return jsonResponse({'items': []});
+        return jsonResponse({
+          'items': [
+            {
+              'id': 'n$start',
+              'volumeInfo': {'title': 'Novel $start'},
+            },
+          ],
+        });
+      });
+      final service = GoogleBooksService(client: client, apiKey: '');
+      final page1 = await service.getPopular();
+      final page2 = await service.getPopular(page: 2);
+      expect(page1.single.title, 'Novel 0');
+      expect(page2.single.title, 'Novel 20');
+      expect(requests, ['roman@0', 'novel@0', 'novel@20']);
+    });
+  });
+
+  group('JsonFetcher', () {
+    test('süresi dolan önbellek 429 gelince yedek olarak kullanılır', () async {
+      var calls = 0;
+      final client = MockClient((_) async {
+        calls++;
+        return calls == 1
+            ? jsonResponse({'ok': true})
+            : http.Response('', 429);
+      });
+      final fetcher = JsonFetcher(
+        source: 'Test',
+        client: client,
+        cacheFor: Duration.zero,
+        retries: 0,
+      );
+      final uri = Uri.https('example.com', '/x');
+      expect(await fetcher.get(uri), {'ok': true});
+      expect(await fetcher.get(uri), {'ok': true}); // 429, önbellekten
+      expect(calls, 2);
+    });
+
+    test('önbellek yoksa 503 hata olarak iletilir', () async {
+      final client = MockClient((_) async => http.Response('', 503));
+      final fetcher = JsonFetcher(
+        source: 'Test',
+        client: client,
+        retries: 0,
+      );
+      expect(
+        fetcher.get(Uri.https('example.com', '/y')),
         throwsA(isA<ContentServiceException>()),
       );
     });
@@ -297,6 +443,126 @@ void main() {
       expect(game.genres, ['Aksiyon']);
       expect(game.meta, 'PC · PlayStation');
       expect(game.imageUrl, 'https://media.rawg.io/x.jpg');
+    });
+
+    test('getPopular sayfa numarasını page parametresiyle gönderir', () async {
+      final client = MockClient((request) async {
+        expect(request.url.queryParameters['page'], '3');
+        return jsonResponse({'results': []});
+      });
+      final games =
+          await RawgService(client: client, apiKey: 'k').getPopular(page: 3);
+      expect(games, isEmpty);
+    });
+
+    test('son sayfadan sonrası (404) boş liste döner', () async {
+      final client = MockClient(
+          (_) async => http.Response('{"detail":"Invalid page."}', 404));
+      final games =
+          await RawgService(client: client, apiKey: 'k').getPopular(page: 50);
+      expect(games, isEmpty);
+    });
+
+    test('getDetails description_raw, playtime ve geliştiriciyi ekler',
+        () async {
+      final client = MockClient((request) async {
+        expect(request.url.path, '/api/games/7');
+        expect(request.url.queryParameters['key'], 'k');
+        return jsonResponse({
+          'id': 7,
+          'name': 'Karanlık Koridor',
+          'description_raw': 'Terk edilmiş bir hastanede geçen korku oyunu.'
+              '\n\n\n\nKaranlıkta hayatta kal.\n\nEspañol\nUn juego de terror.',
+          'playtime': 12,
+          'developers': [
+            {'name': 'Gece Stüdyo'},
+            {'name': 'Ayna Games'},
+            {'name': 'Üçüncü Ekip'},
+          ],
+        });
+      });
+
+      final base = ContentItem(
+        id: 'rawg_7',
+        type: ContentType.game,
+        title: 'Karanlık Koridor',
+        year: 2023,
+        rating: 8.4,
+        genres: const ['Aksiyon'],
+        description: 'Aksiyon türünde bir oyun.',
+        meta: 'PC',
+        artColors: const [Color(0xFF000000), Color(0xFFFFFFFF)],
+      );
+
+      final detail =
+          await RawgService(client: client, apiKey: 'k').getDetails(base);
+
+      expect(detail.description,
+          'Terk edilmiş bir hastanede geçen korku oyunu.\n\nKaranlıkta hayatta kal.');
+      expect(detail.length, 12);
+      expect(detail.lengthLabel, '12 saat');
+      expect(detail.creator, 'Gece Stüdyo, Ayna Games');
+      // Listeden gelen alanlar korunur.
+      expect(detail.title, 'Karanlık Koridor');
+      expect(detail.year, 2023);
+      expect(detail.meta, 'PC');
+    });
+
+    test('getDetails boş alanlarda eski bilgiyi korur', () async {
+      final client = MockClient((_) async => jsonResponse({
+            'id': 7,
+            'description_raw': '',
+            'playtime': 0,
+            'developers': [],
+          }));
+      final base = ContentItem(
+        id: 'rawg_7',
+        type: ContentType.game,
+        title: 'X',
+        year: 0,
+        rating: 0,
+        genres: const ['Oyun'],
+        description: 'Liste açıklaması',
+        meta: '',
+        artColors: const [Color(0xFF000000), Color(0xFFFFFFFF)],
+      );
+      final detail =
+          await RawgService(client: client, apiKey: 'k').getDetails(base);
+      expect(detail.description, 'Liste açıklaması');
+      expect(detail.length, isNull);
+      expect(detail.creator, isNull);
+    });
+
+    test('getDetails örnek veride istek göndermeden öğeyi döndürür',
+        () async {
+      var requests = 0;
+      final client = MockClient((_) async {
+        requests++;
+        return jsonResponse({});
+      });
+      final sample = SampleData.games.first;
+      final detail =
+          await RawgService(client: client, apiKey: 'k').getDetails(sample);
+      expect(requests, 0);
+      expect(detail, same(sample));
+    });
+
+    test('örnek oyunların açıklaması tek satırdan uzundur', () {
+      for (final game in SampleData.games) {
+        expect(game.description, contains('\n\n'), reason: game.title);
+        expect(game.creator, isNotNull, reason: game.title);
+        expect(game.lengthLabel, isNotNull, reason: game.title);
+      }
+    });
+
+    test('ilk sayfadaki 404 hatası yutulmaz', () async {
+      final client =
+          MockClient((_) async => http.Response('{"detail":"x"}', 404));
+      expect(
+        RawgService(client: client, apiKey: 'k').getPopular(),
+        throwsA(isA<ContentServiceException>()
+            .having((e) => e.statusCode, 'statusCode', 404)),
+      );
     });
   });
 }

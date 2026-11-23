@@ -37,20 +37,33 @@ class TmdbService implements ContentService {
   };
 
   @override
-  Future<List<ContentItem>> getPopular() => _fetch('/3/movie/popular', {});
+  Future<List<ContentItem>> getPopular({int page = 1}) {
+    // TODO(Ali Kağan): sayfalama; şimdilik yalnızca 1. sayfa.
+    if (page > 1) return Future.value(const []);
+    return _fetch('/3/movie/popular', {});
+  }
 
   @override
-  Future<List<ContentItem>> search(String query) {
+  Future<List<ContentItem>> search(String query, {int page = 1}) {
     final q = query.trim();
-    if (q.isEmpty) return Future.value(const []);
+    if (q.isEmpty || page > 1) return Future.value(const []);
     return _fetch('/3/search/movie', {'query': q});
   }
 
   @override
-  Future<List<ContentItem>> getByGenre(Genre genre) => _fetch(
-        '/3/discover/movie',
-        {'with_genres': '${genre.tmdbId}', 'sort_by': 'popularity.desc'},
-      );
+  Future<List<ContentItem>> getByGenre(Genre genre, {int page = 1}) {
+    if (page > 1) return Future.value(const []);
+    return _fetch(
+      '/3/discover/movie',
+      {'with_genres': '${genre.tmdbId}', 'sort_by': 'popularity.desc'},
+    );
+  }
+
+  /// Şimdilik listedeki bilgiyi aynen döndürür.
+  /// TODO(Ali Kağan): /3/movie/{id}?language=tr-TR ile detayı çekip
+  /// `item.copyWith(...)` döndür.
+  @override
+  Future<ContentItem> getDetails(ContentItem item) => Future.value(item);
 
   Future<List<ContentItem>> _fetch(
       String path, Map<String, String> params) async {
