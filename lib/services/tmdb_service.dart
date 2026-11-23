@@ -37,36 +37,87 @@ class TmdbService implements ContentService {
   };
 
   @override
-  Future<List<ContentItem>> getPopular({int page = 1}) {
-    // TODO(Ali Kağan): sayfalama; şimdilik yalnızca 1. sayfa.
-    if (page > 1) return Future.value(const []);
-    return _fetch('/3/movie/popular', {});
-  }
+  Future<List<ContentItem>> getPopular({int page = 1}) =>
+      _fetch('/3/movie/popular', {}, page: page);
 
   @override
   Future<List<ContentItem>> search(String query, {int page = 1}) {
     final q = query.trim();
-    if (q.isEmpty || page > 1) return Future.value(const []);
-    return _fetch('/3/search/movie', {'query': q});
+    if (q.isEmpty) return Future.value(const []);
+    return _fetch('/3/search/movie', {'query': q}, page: page);
   }
 
   @override
-  Future<List<ContentItem>> getByGenre(Genre genre, {int page = 1}) {
-    if (page > 1) return Future.value(const []);
-    return _fetch(
-      '/3/discover/movie',
-      {'with_genres': '${genre.tmdbId}', 'sort_by': 'popularity.desc'},
+  Future<List<ContentItem>> getByGenre(Genre genre, {int page = 1}) => _fetch(
+        '/3/discover/movie',
+        {'with_genres': '${genre.tmdbId}', 'sort_by': 'popularity.desc'},
+        page: page,
+      );
+
+  /// Detay ekranı açılınca /3/movie/{id}?append_to_response=credits&language=tr-TR
+  /// isteğiyle yönetmen (creator), süre (length, dakika), türler ve tam
+  /// açıklamayı getirir. TMDB'den gelmeyen öğeler (örnek veri) aynen döner.
+  @override
+  Future<ContentItem> getDetails(ContentItem item) async {
+    if (!item.id.startsWith('tmdb_')) return item;
+    if (_token.isEmpty) {
+      throw const ContentServiceException('TMDB anahtarı yok (env.json).');
+    }
+    final movieId = item.id.substring(5);
+    final uri = Uri.https('api.themoviedb.org', '/3/movie/$movieId', {
+      'language': 'tr-TR',
+      'append_to_response': 'credits',
+      if (_isShortKey) 'api_key': _token,
+    });
+    final body = await _http.get(uri, headers: {
+      if (!_isShortKey) 'Authorization': 'Bearer $_token',
+      'Accept': 'application/json',
+    });
+    if (body is! Map) {
+      throw const ContentServiceException('TMDB beklenmeyen yanıt verdi.');
+    }
+
+    final runtime = (body['runtime'] as num?)?.toInt() ?? 0;
+    final overview = (body['overview'] as String?)?.trim() ?? '';
+    final rating = (body['vote_average'] as num?)?.toDouble();
+
+    final genres = <String>[];
+    for (final g in (body['genres'] as List?) ?? const []) {
+      if (g is Map) {
+        final id = (g['id'] as num?)?.toInt();
+        final name = (id != null ? genreNames[id] : null) ??
+            (g['name'] as String?)?.trim();
+        if (name != null && name.isNotEmpty) genres.add(name);
+      }
+    }
+
+    final directors = <String>[];
+    final credits = body['credits'];
+    final crew = credits is Map ? credits['crew'] : null;
+    for (final c in (crew as List?) ?? const []) {
+      if (c is Map && c['job'] == 'Director') {
+        final name = (c['name'] as String?)?.trim();
+        if (name != null && name.isNotEmpty && !directors.contains(name)) {
+          directors.add(name);
+        }
+      }
+    }
+
+    return item.copyWith(
+      description: overview.isEmpty ? null : overview,
+      creator: directors.isEmpty ? null : directors.take(2).join(', '),
+      length: runtime > 0 ? runtime : null,
+      genres: genres.isEmpty ? null : genres.take(2).toList(),
+      rating: rating != null && rating > 0 ? rating : null,
     );
   }
 
-  /// Şimdilik listedeki bilgiyi aynen döndürür.
-  /// TODO(Ali Kağan): /3/movie/{id}?language=tr-TR ile detayı çekip
-  /// `item.copyWith(...)` döndür.
-  @override
-  Future<ContentItem> getDetails(ContentItem item) => Future.value(item);
-
   Future<List<ContentItem>> _fetch(
-      String path, Map<String, String> params) async {
+    String path,
+    Map<String, String> params, {
+    int page = 1,
+  }) async {
+    if (page < 1) return const [];
     if (_token.isEmpty) {
       throw const ContentServiceException('TMDB anahtarı yok (env.json).');
     }
@@ -74,13 +125,21 @@ class TmdbService implements ContentService {
       ...params,
       'language': 'tr-TR',
       'include_adult': 'false',
-      'page': '1',
+      'page': '$page',
       if (_isShortKey) 'api_key': _token,
     });
-    final body = await _http.get(uri, headers: {
-      if (!_isShortKey) 'Authorization': 'Bearer $_token',
-      'Accept': 'application/json',
-    });
+    final dynamic body;
+    try {
+      body = await _http.get(uri, headers: {
+        if (!_isShortKey) 'Authorization': 'Bearer $_token',
+        'Accept': 'application/json',
+      });
+    } on ContentServiceException catch (e) {
+      if (page > 1 && (e.statusCode == 400 || e.statusCode == 404)) {
+        return const [];
+      }
+      rethrow;
+    }
     final results = (body is Map ? body['results'] : null) as List<dynamic>?;
     if (results == null) return const [];
     return results.map(_toContentItem).whereType<ContentItem>().toList();

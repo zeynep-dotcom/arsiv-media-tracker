@@ -402,6 +402,74 @@ void main() {
         throwsA(isA<ContentServiceException>()),
       );
     });
+
+    test('getPopular sayfa numarasını page parametresiyle gönderir', () async {
+      final client = MockClient((request) async {
+        expect(request.url.queryParameters['page'], '2');
+        return jsonResponse({'results': []});
+      });
+      final films = await TmdbService(client: client, token: 'eyJ.test.token')
+          .getPopular(page: 2);
+      expect(films, isEmpty);
+    });
+
+    test('getDetails /3/movie/{id} ile yönetmen, süre, tür ve açıklamayı ekler',
+        () async {
+      final client = MockClient((request) async {
+        expect(request.url.path, '/3/movie/42');
+        expect(request.url.queryParameters['append_to_response'], 'credits');
+        expect(request.url.queryParameters['language'], 'tr-TR');
+        return jsonResponse({
+          'id': 42,
+          'runtime': 148,
+          'overview': 'Rüya içinde rüya.',
+          'vote_average': 8.8,
+          'genres': [
+            {'id': 878, 'name': 'Bilim-Kurgu'},
+            {'id': 28, 'name': 'Aksiyon'},
+          ],
+          'credits': {
+            'crew': [
+              {'job': 'Producer', 'name': 'Emma Thomas'},
+              {'job': 'Director', 'name': 'Christopher Nolan'},
+            ],
+          },
+        });
+      });
+
+      const base = ContentItem(
+        id: 'tmdb_42',
+        type: ContentType.film,
+        title: 'Başlangıç',
+        year: 2010,
+        rating: 8.0,
+        genres: ['Film'],
+        description: 'Kısa',
+        meta: 'Inception',
+        artColors: [],
+      );
+
+      final detail = await TmdbService(client: client, token: 'eyJ.test.token')
+          .getDetails(base);
+
+      expect(detail.creator, 'Christopher Nolan');
+      expect(detail.creatorLabel, 'Yönetmen');
+      expect(detail.length, 148);
+      expect(detail.lengthLabel, '148 dk');
+      expect(detail.description, 'Rüya içinde rüya.');
+      expect(detail.genres, ['Bilim kurgu', 'Aksiyon']);
+      expect(detail.rating, 8.8);
+      expect(detail.title, 'Başlangıç');
+      expect(detail.meta, 'Inception');
+    });
+
+    test('getDetails örnek veride istek göndermeden öğeyi döndürür', () async {
+      final client = MockClient((_) async => fail('istek atılmamalı'));
+      final sample = SampleData.films.first;
+      final detail = await TmdbService(client: client, token: 'eyJ.test.token')
+          .getDetails(sample);
+      expect(detail, same(sample));
+    });
   });
 
   group('RawgService', () {
