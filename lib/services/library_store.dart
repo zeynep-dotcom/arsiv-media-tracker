@@ -115,6 +115,29 @@ class LibraryStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Silinen bir kaydı durumu, puanı, ilerlemesi ve eklenme tarihiyle geri
+  /// koyar (Kütüphanem'deki "Geri al").
+  void restore(LibraryEntry entry) {
+    final copy = entry.copy();
+    _entries[copy.item.id] = copy;
+    _save(copy);
+    notifyListeners();
+  }
+
+  /// Detay ekranı servisten zengin bilgiyi (ör. sayfa sayısı, süre) alınca
+  /// kütüphanedeki kaydın içerik bilgisini günceller; böylece Kütüphanem
+  /// satırında da ilerleme birimle görünür. İçerik kütüphanede değilse ya da
+  /// uzunluk değişmediyse bir şey yapmaz.
+  void updateItem(ContentItem item) {
+    final entry = _entries[item.id];
+    if (entry == null || item.length == null) return;
+    if (entry.item.length == item.length) return;
+    final updated = entry.copy(item: item);
+    _entries[item.id] = updated;
+    _save(updated);
+    notifyListeners();
+  }
+
   void toggleFavorite(ContentItem item) {
     final entry = _ensure(item);
     entry.favorite = !entry.favorite;
@@ -177,7 +200,7 @@ class LibraryStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Kütüphanem sekmeleri: İzlenecek, Okunan, Oynanan, Favoriler.
+  /// Kütüphanem sekmeleri: Filmler, Kitaplar, Oyunlar, Favoriler.
   List<LibraryEntry> watchList() =>
       entries.where((e) => e.item.type == ContentType.film).toList();
 
