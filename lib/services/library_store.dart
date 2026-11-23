@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:arsiv_app/models/content_item.dart';
 import 'package:arsiv_app/models/content_type.dart';
 import 'package:arsiv_app/models/library_entry.dart';
+import 'package:arsiv_app/services/collection_store.dart';
+import 'package:arsiv_app/services/save_errors.dart';
 
 /// Kütüphanem'deki sıralama seçenekleri.
 enum LibrarySort {
@@ -20,6 +22,7 @@ enum LibrarySort {
 /// Kullanıcının kütüphanesi. Oturum açılınca (AuthGate [start] çağırır)
 /// users/{uid}/library koleksiyonunu dinler; her değişiklik önce bellekte
 /// yapılır, sonra Firestore'a yazılır. Oturum yokken yalnızca bellekte tutar.
+/// Firestore bir yazmayı reddederse "Kaydedilemedi. Tekrar dene." çıkar.
 class LibraryStore extends ChangeNotifier {
   LibraryStore._();
 
@@ -86,18 +89,21 @@ class LibraryStore extends ChangeNotifier {
     _collection
         ?.doc(entry.item.id)
         .set(entry.toMap())
-        .catchError((Object e) => debugPrint(
-            '[Kütüphane] ${entry.item.id} kaydedilemedi · $e'));
+        .catchError((Object e) => SaveErrors.report(
+            'Kütüphane ${entry.item.id}', e));
   }
 
   void _delete(String itemId) {
     _collection?.doc(itemId).delete().catchError(
-        (Object e) => debugPrint('[Kütüphane] $itemId silinemedi · $e'));
+        (Object e) => SaveErrors.report('Kütüphane $itemId', e));
   }
 
   List<LibraryEntry> get entries => _entries.values.toList();
 
   LibraryEntry? entryFor(ContentItem item) => _entries[item.id];
+
+  /// Koleksiyonlar yalnızca içerik kimliği tuttuğu için kimlikle arama.
+  LibraryEntry? entryById(String itemId) => _entries[itemId];
 
   bool contains(ContentItem item) => _entries.containsKey(item.id);
 
@@ -109,9 +115,11 @@ class LibraryStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Kütüphaneden siler; içerik bütün koleksiyonlardan da çıkar.
   void remove(ContentItem item) {
     _entries.remove(item.id);
     _delete(item.id);
+    CollectionStore.instance.removeEverywhere(item.id);
     notifyListeners();
   }
 

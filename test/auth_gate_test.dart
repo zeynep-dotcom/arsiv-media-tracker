@@ -8,6 +8,7 @@ import 'package:mock_exceptions/mock_exceptions.dart';
 import 'package:arsiv_app/core/auth_gate.dart';
 import 'package:arsiv_app/core/theme/app_theme.dart';
 import 'package:arsiv_app/services/auth_service.dart';
+import 'package:arsiv_app/services/collection_store.dart';
 import 'package:arsiv_app/services/library_store.dart';
 import 'package:arsiv_app/services/sample_data.dart';
 
@@ -16,8 +17,12 @@ void main() {
   late FakeFirebaseFirestore firestore;
   late AuthService service;
 
-  // AuthGate kütüphaneyi tek örnek LibraryStore üzerinden başlatır.
-  tearDown(LibraryStore.instance.stop);
+  // AuthGate kütüphaneyi ve koleksiyonları tek örnek store'lar üzerinden
+  // başlatır.
+  tearDown(() {
+    LibraryStore.instance.stop();
+    CollectionStore.instance.stop();
+  });
 
   void createService({bool signedIn = false}) {
     auth = MockFirebaseAuth(
@@ -204,5 +209,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(library.entries, isEmpty);
     expect(button('Giriş yap'), findsOneWidget);
+  });
+
+  testWidgets('giriş yapınca koleksiyonlar yazılır, çıkışta boşalır',
+      (tester) async {
+    createService(signedIn: true);
+    await pumpGate(tester);
+
+    final collections = CollectionStore.instance;
+    final created = await tester.runAsync(() async {
+      final c = collections.create('Hafta sonu');
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      return c;
+    });
+    final doc = await tester.runAsync(() =>
+        firestore.doc('users/akif-uid/collections/${created!.id}').get());
+    expect(doc?.data()?['name'], 'Hafta sonu');
+
+    await service.logout();
+    await tester.pumpAndSettle();
+    expect(collections.collections, isEmpty);
   });
 }

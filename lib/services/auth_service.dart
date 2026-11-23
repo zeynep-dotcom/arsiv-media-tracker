@@ -91,6 +91,10 @@ class AuthService {
   CollectionReference<Map<String, dynamic>> libraryOf(String uid) =>
       _firestore.collection('users').doc(uid).collection('library');
 
+  /// Kullanıcının koleksiyonları: users/{uid}/collections.
+  CollectionReference<Map<String, dynamic>> collectionsOf(String uid) =>
+      _firestore.collection('users').doc(uid).collection('collections');
+
   /// users/{uid} belgesindeki üyelik planı ("free" ya da "premium").
   Future<String> fetchPlan() async {
     final user = _auth.currentUser;
