@@ -4,9 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arsiv_app/core/auth_gate.dart';
+import 'package:arsiv_app/core/config/genre_map.dart';
 import 'package:arsiv_app/core/theme/app_theme.dart';
+import 'package:arsiv_app/models/content_item.dart';
+import 'package:arsiv_app/models/content_type.dart';
+import 'package:arsiv_app/screens/discover/discover_screen.dart';
 import 'package:arsiv_app/screens/onboarding/genre_preference_screen.dart';
+import 'package:arsiv_app/services/app_services.dart';
 import 'package:arsiv_app/services/auth_service.dart';
+import 'package:arsiv_app/services/content_service.dart';
 import 'package:arsiv_app/services/library_store.dart';
 import 'package:arsiv_app/services/user_preferences.dart';
 
@@ -94,6 +100,113 @@ void main() {
     });
   });
 
+  group('Keşfet önerisi', () {
+    late ContentService films, books, games;
+    setUp(() {
+      films = AppServices.films;
+      books = AppServices.books;
+      games = AppServices.games;
+    });
+    tearDown(() {
+      AppServices.films = films;
+      AppServices.books = books;
+      AppServices.games = games;
+      UserPreferences.instance.stop();
+    });
+
+    ContentItem make(
+      String title,
+      String genre,
+      double rating,
+      ContentType type,
+    ) => ContentItem(
+      id: title,
+      type: type,
+      title: title,
+      year: 2025,
+      rating: rating,
+      genres: [genre],
+      description: '',
+      meta: '',
+      artColors: const [Colors.black, Colors.black],
+    );
+
+    /// "Bu haftanın önerisi" kartındaki başlık.
+    String featuredTitle(WidgetTester tester) {
+      final card = find
+          .ancestor(
+            of: find.text('BU HAFTANIN ÖNERİSİ'),
+            matching: find.byType(Column),
+          )
+          .first;
+      final texts = tester
+          .widgetList<Text>(
+            find.descendant(of: card, matching: find.byType(Text)),
+          )
+          .map((t) => t.data)
+          .toList();
+      return texts[1]!;
+    }
+
+    testWidgets('tür tercihi değişince öneri yeniden hesaplanır', (
+      tester,
+    ) async {
+      usePhoneScreen(tester);
+      const korku = ['Korku film', 'Korku kitap', 'Korku oyun'];
+      for (final (i, type) in ContentType.values.indexed) {
+        final service = _GenreFake(
+          popular: [make('Komedi ${type.name}', 'Komedi', 9.5 - i / 10, type)],
+          korku: make(korku[i], 'Korku', 5, type),
+        );
+        switch (type) {
+          case ContentType.film:
+            AppServices.films = service;
+          case ContentType.book:
+            AppServices.books = service;
+          case ContentType.game:
+            AppServices.games = service;
+        }
+      }
+      final firestore = FakeFirebaseFirestore();
+      final doc = firestore.doc('users/ahmet-uid');
+      await tester.runAsync(() => doc.set({'plan': 'free'}));
+      UserPreferences.instance.start(doc);
+      // İlk belge okuması gelsin; sonradan gelip kaydı ezmesin.
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark(),
+          home: const Scaffold(body: DiscoverScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(featuredTitle(tester), startsWith('Komedi'));
+
+      await tester.runAsync(
+        () => UserPreferences.instance.saveFavoriteGenres([
+          'Korku',
+          'Gizem',
+          'Dram',
+        ]),
+      );
+      // Öneri gerçek zamanda yeniden hesaplanır; kart yeni sonucu bir
+      // sonraki karede alır.
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(korku, contains(featuredTitle(tester)));
+    });
+  });
+
   group('kayıttan sonra tür tercihi', () {
     late MockFirebaseAuth auth;
     late FakeFirebaseFirestore firestore;
@@ -177,4 +290,26 @@ void main() {
       expect(doc.data()?.containsKey('favoriteGenres'), isFalse);
     });
   });
+}
+
+/// Popüler listede [popular], Korku türünde [korku] döndüren sahte servis.
+class _GenreFake implements ContentService {
+  _GenreFake({required this.popular, required this.korku});
+  final List<ContentItem> popular;
+  final ContentItem korku;
+
+  @override
+  Future<List<ContentItem>> getPopular({int page = 1}) async =>
+      page == 1 ? popular : const [];
+
+  @override
+  Future<List<ContentItem>> getByGenre(Genre genre, {int page = 1}) async =>
+      genre.label == 'Korku' && page == 1 ? [korku] : const [];
+
+  @override
+  Future<List<ContentItem>> search(String query, {int page = 1}) async =>
+      const [];
+
+  @override
+  Future<ContentItem> getDetails(ContentItem item) async => item;
 }

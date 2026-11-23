@@ -59,7 +59,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     if (listEquals(UserPreferences.instance.favoriteGenres, _pickGenres)) {
       return;
     }
-    setState(() => _pick = _loadPick());
+    setState(() {
+      _pick = _loadPick();
+    });
   }
 
   /// "Bu haftanın önerisi": satırlar yüklendikten sonra kütüphane ve tür
