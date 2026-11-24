@@ -8,6 +8,7 @@ import 'package:arsiv_app/services/app_services.dart';
 import 'package:arsiv_app/services/library_store.dart';
 import 'package:arsiv_app/widgets/content_row.dart';
 import 'package:arsiv_app/widgets/poster_art.dart';
+import 'package:arsiv_app/widgets/progress_editor.dart';
 import 'package:arsiv_app/widgets/type_badge.dart';
 
 /// 02 · Detay: büyük afiş, bilgiler, kütüphaneye ekleme, benzer içerikler.
@@ -35,7 +36,10 @@ class _DetailScreenState extends State<DetailScreen> {
     try {
       final detailed =
           await AppServices.forType(widget.item.type).getDetails(widget.item);
-      if (mounted) setState(() => item = detailed);
+      if (!mounted) return;
+      setState(() => item = detailed);
+      // Sayfa sayısı/süre geldiyse Kütüphanem satırı da birimle gösterir.
+      LibraryStore.instance.updateItem(detailed);
     } catch (e) {
       // Detay gelmezse kart bilgisi gösterilmeye devam eder.
       debugPrint('[Detay] ${widget.item.id} detayı alınamadı · $e');
@@ -259,10 +263,10 @@ class _DetailScreenState extends State<DetailScreen> {
                     if (entry != null &&
                         entry.status == LibraryStatus.inProgress) ...[
                       const SizedBox(height: 16),
-                      _ProgressSlider(
+                      ProgressEditor(
+                        item: item,
                         progress: entry.progress,
-                        onChangeEnd: (value) =>
-                            store.setProgress(item, value),
+                        onChanged: (value) => store.setProgress(item, value),
                       ),
                     ],
                     const SizedBox(height: 18),
@@ -347,60 +351,6 @@ class _OutlineAction extends StatelessWidget {
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
-    );
-  }
-}
-
-/// İlerleme çubuğu. Sürüklerken yalnızca ekrandaki değer değişir; parmak
-/// kalkınca [onChangeEnd] bir kez çağrılır, böylece Firestore'a her adımda
-/// değil tek seferde yazılır.
-class _ProgressSlider extends StatefulWidget {
-  const _ProgressSlider({required this.progress, required this.onChangeEnd});
-
-  final double progress;
-  final ValueChanged<double> onChangeEnd;
-
-  @override
-  State<_ProgressSlider> createState() => _ProgressSliderState();
-}
-
-class _ProgressSliderState extends State<_ProgressSlider> {
-  double? _dragValue;
-
-  @override
-  Widget build(BuildContext context) {
-    final value = (_dragValue ?? widget.progress).clamp(0.0, 1.0).toDouble();
-    final percent = (value * 100).round();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Text(
-              'İlerleme',
-              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-            ),
-            const Spacer(),
-            Text(
-              '%$percent',
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-            ),
-          ],
-        ),
-        Slider(
-          value: value,
-          divisions: 20,
-          label: '%$percent',
-          activeColor: AppColors.red,
-          inactiveColor: AppColors.divider,
-          onChanged: (v) => setState(() => _dragValue = v),
-          onChangeEnd: (v) {
-            setState(() => _dragValue = null);
-            widget.onChangeEnd(v);
-          },
-        ),
-      ],
     );
   }
 }

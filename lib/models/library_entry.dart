@@ -33,6 +33,19 @@ class LibraryEntry {
   final DateTime addedAt;
   DateTime? completedAt;
 
+  /// Aynı alanlarla bağımsız bir kopya. Kütüphanem'de kaydırarak silinen
+  /// içerik "Geri al" için bununla saklanır. [item] verilirse içerik bilgisi
+  /// (ör. Detay'dan gelen sayfa sayısı) yenisiyle değiştirilir.
+  LibraryEntry copy({ContentItem? item}) => LibraryEntry(
+        item: item ?? this.item,
+        status: status,
+        progress: progress,
+        favorite: favorite,
+        userRating: userRating,
+        addedAt: addedAt,
+        completedAt: completedAt,
+      );
+
   /// users/{uid}/library/{itemId} belgesi ve yerel kayıt için düz harita.
   /// Tarihler milisaniye olarak tutulur (Firestore'a bağımlı olmasın diye).
   Map<String, dynamic> toMap() => {
