@@ -1,7 +1,8 @@
 rules_version = '2';
 
 // ARŞİV güvenlik kuralları: her kullanıcı yalnızca kendi users/{uid}
-// belgesini ve users/{uid}/library/* alt koleksiyonunu okuyup yazabilir.
+// belgesini ve altındaki library/* ile collections/* belgelerini okuyup
+// yazabilir.
 // Yayınlamak için: firebase deploy --only firestore:rules
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -15,6 +16,18 @@ service cloud.firestore {
 
       match /library/{itemId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // Koleksiyonlar: ad 1-40 karakter, en çok 200 içerik, başka alan yok.
+      match /collections/{collectionId} {
+        allow read, delete: if request.auth != null && request.auth.uid == userId;
+        allow create, update: if request.auth != null && request.auth.uid == userId
+          && request.resource.data.keys().hasOnly(['name', 'itemIds', 'createdAt', 'updatedAt'])
+          && request.resource.data.name is string
+          && request.resource.data.name.size() >= 1
+          && request.resource.data.name.size() <= 40
+          && request.resource.data.itemIds is list
+          && request.resource.data.itemIds.size() <= 200;
       }
     }
   }

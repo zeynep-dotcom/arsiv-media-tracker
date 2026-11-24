@@ -9,11 +9,13 @@ import 'package:arsiv_app/screens/auth/register_screen.dart';
 import 'package:arsiv_app/screens/home_shell.dart';
 import 'package:arsiv_app/screens/profile/profile_screen.dart';
 import 'package:arsiv_app/services/auth_service.dart';
+import 'package:arsiv_app/services/collection_store.dart';
 import 'package:arsiv_app/services/library_store.dart';
 
 /// Uygulamanın girişi: oturum yoksa Giriş ekranı, varsa [home] açılır.
 /// Giriş/kayıt/şifre ekranlarının callback'leri burada AuthService'e bağlanır;
-/// oturum açılınca kütüphane users/{uid}/library ile eşitlenir.
+/// oturum açılınca kütüphane (users/{uid}/library) ve koleksiyonlar
+/// (users/{uid}/collections) eşitlenir, çıkışta boşaltılır.
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key, this.service, this.home = const HomeShell()});
 
@@ -48,10 +50,13 @@ class _AuthGateState extends State<AuthGate> {
 
   void _syncLibrary(User? user) {
     final library = LibraryStore.instance;
+    final collections = CollectionStore.instance;
     if (user == null) {
       library.stop();
+      collections.stop();
     } else {
       library.start(user.uid, _auth.libraryOf(user.uid));
+      collections.start(user.uid, _auth.collectionsOf(user.uid));
     }
   }
 
