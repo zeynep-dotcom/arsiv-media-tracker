@@ -134,6 +134,10 @@ void main() {
     await tapVisible(tester, find.byType(Checkbox));
     await tapVisible(tester, button('Kayıt ol'));
 
+    // Kayıttan sonra "Hangi türleri seversin?" açılır (genre_preference_test).
+    expect(find.text('Hangi türleri seversin?'), findsOneWidget);
+    await tapVisible(tester, find.text('Atla'));
+
     expect(find.text('ANA EKRAN'), findsOneWidget);
     final uid = auth.currentUser!.uid;
     final doc = await firestore.doc('users/$uid').get();

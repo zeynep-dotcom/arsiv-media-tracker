@@ -7,10 +7,12 @@ import 'package:arsiv_app/screens/auth/forgot_password_screen.dart';
 import 'package:arsiv_app/screens/auth/login_screen.dart';
 import 'package:arsiv_app/screens/auth/register_screen.dart';
 import 'package:arsiv_app/screens/home_shell.dart';
+import 'package:arsiv_app/screens/onboarding/genre_preference_screen.dart';
 import 'package:arsiv_app/screens/profile/profile_screen.dart';
 import 'package:arsiv_app/services/auth_service.dart';
 import 'package:arsiv_app/services/collection_store.dart';
 import 'package:arsiv_app/services/library_store.dart';
+import 'package:arsiv_app/services/user_preferences.dart';
 
 /// Uygulamanın girişi: oturum yoksa Giriş ekranı, varsa [home] açılır.
 /// Giriş/kayıt/şifre ekranlarının callback'leri burada AuthService'e bağlanır;
@@ -32,13 +34,21 @@ class _AuthGateState extends State<AuthGate> {
   late User? _user = _auth.currentUser;
   StreamSubscription<User?>? _subscription;
 
+  /// Kayıttan hemen sonra "Hangi türleri seversin?" ekranı gösterilir.
+  bool _askGenres = false;
+
   @override
   void initState() {
     super.initState();
     _syncLibrary(_user);
+    _syncPreferences(_user);
     _subscription = _auth.authStateChanges.listen((user) {
       _syncLibrary(user);
-      setState(() => _user = user);
+      _syncPreferences(user);
+      setState(() {
+        _user = user;
+        if (user == null) _askGenres = false;
+      });
     });
   }
 
@@ -60,30 +70,60 @@ class _AuthGateState extends State<AuthGate> {
     }
   }
 
+  void _syncPreferences(User? user) {
+    final preferences = UserPreferences.instance;
+    if (user == null) {
+      preferences.stop();
+    } else {
+      preferences.start(_auth.userDoc(user.uid));
+    }
+  }
+
+  void _finishGenres() => setState(() => _askGenres = false);
+
+  Future<void> _saveGenres(List<String> genres) async {
+    await UserPreferences.instance.saveFavoriteGenres(genres);
+    _finishGenres();
+  }
+
   void _openRegister(BuildContext context) {
-    Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (routeContext) => RegisterScreen(
-        onRegister: (name, email, password) async {
-          await _auth.register(name, email, password);
-          // Kayıt ekranını kapat; kapı artık ana ekranı gösterir.
-          if (routeContext.mounted) {
-            Navigator.of(routeContext).popUntil((route) => route.isFirst);
-          }
-        },
-        onLoginTap: () => Navigator.of(routeContext).pop(),
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (routeContext) => RegisterScreen(
+          onRegister: (name, email, password) async {
+            await _auth.register(name, email, password);
+            if (mounted) setState(() => _askGenres = true);
+            // Kayıt ekranını kapat; kapı artık ana ekranı gösterir.
+            if (routeContext.mounted) {
+              Navigator.of(routeContext).popUntil((route) => route.isFirst);
+            }
+          },
+          onLoginTap: () => Navigator.of(routeContext).pop(),
+        ),
       ),
-    ));
+    );
   }
 
   void _openForgotPassword(BuildContext context) {
-    Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => ForgotPasswordScreen(onSendLink: _auth.sendPasswordReset),
-    ));
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            ForgotPasswordScreen(onSendLink: _auth.sendPasswordReset),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_user != null) return widget.home;
+    if (_user != null) {
+      if (_askGenres) {
+        return GenrePreferenceScreen(
+          onSave: _saveGenres,
+          onSkip: _finishGenres,
+        );
+      }
+      return widget.home;
+    }
     return LoginScreen(
       onLogin: _auth.login,
       onRegisterTap: () => _openRegister(context),
@@ -99,23 +139,25 @@ void openProfile(BuildContext context, {AuthService? service}) {
   final user = auth.currentUser;
   if (user == null) return;
 
-  Navigator.of(context).push(MaterialPageRoute<void>(
-    builder: (routeContext) => FutureBuilder<String>(
-      future: auth.fetchPlan(),
-      builder: (_, plan) => ProfileScreen(
-        name: user.displayName ?? '',
-        email: user.email ?? '',
-        isPremium: plan.data == 'premium',
-        onUpgrade: () => ScaffoldMessenger.of(routeContext).showSnackBar(
-          const SnackBar(content: Text('Ödeme ekranı yakında.')),
+  Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (routeContext) => FutureBuilder<String>(
+        future: auth.fetchPlan(),
+        builder: (_, plan) => ProfileScreen(
+          name: user.displayName ?? '',
+          email: user.email ?? '',
+          isPremium: plan.data == 'premium',
+          onUpgrade: () => ScaffoldMessenger.of(routeContext).showSnackBar(
+            const SnackBar(content: Text('Ödeme ekranı yakında.')),
+          ),
+          onLogout: () async {
+            await auth.logout();
+            if (routeContext.mounted) {
+              Navigator.of(routeContext).popUntil((route) => route.isFirst);
+            }
+          },
         ),
-        onLogout: () async {
-          await auth.logout();
-          if (routeContext.mounted) {
-            Navigator.of(routeContext).popUntil((route) => route.isFirst);
-          }
-        },
       ),
     ),
-  ));
+  );
 }
