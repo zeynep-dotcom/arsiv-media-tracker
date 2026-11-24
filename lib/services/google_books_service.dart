@@ -115,16 +115,43 @@ class GoogleBooksService implements ContentService {
     );
   }
 
-  Uri _uri(String path, Map<String, String> params) => Uri.https(
-    'www.googleapis.com',
-    path,
-    {
-      ...params,
-      // Konum belirlenemeyen ağlarda (ör. mobil veri) boş sonuç gelmesin.
-      'country': 'TR',
-      if (_apiKey.isNotEmpty) 'key': _apiKey,
-    },
-  );
+  /// Barkoddan okunan değeri ISBN'e çevirir: boşluk ve tireleri atar.
+  /// 10 haneli ISBN ya da 978/979 ile başlayan 13 haneli ISBN değilse
+  /// (ör. market ürünü barkodu) null döner.
+  static String? normalizeIsbn(String raw) {
+    final code = raw.toUpperCase().replaceAll(RegExp(r'[^0-9X]'), '');
+    final isIsbn10 = RegExp(r'^\d{9}[\dX]$').hasMatch(code);
+    final isIsbn13 = RegExp(r'^97[89]\d{10}$').hasMatch(code);
+    return isIsbn10 || isIsbn13 ? code : null;
+  }
+
+  /// Barkodla kitap bulma: `q=isbn:...` ile arar. Kitap bulunamazsa ya da
+  /// değer ISBN değilse null döner; ağ hatasında hata fırlatır.
+  Future<ContentItem?> findByIsbn(String raw) async {
+    final isbn = normalizeIsbn(raw);
+    if (isbn == null) return null;
+    final items = await _fetch({'q': 'isbn:$isbn'});
+    if (items.isEmpty) return null;
+    final book = items.first;
+    // Google Books'ta kapağı olmayan baskılarda Open Library'nin ISBN
+    // kapağı denenir; o da yoksa PosterArt çizili afişi gösterir.
+    return book.imageUrl != null
+        ? book
+        : book.copyWith(imageUrl: openLibraryCover(isbn));
+  }
+
+  /// Open Library kapak adresi. `default=false` sayesinde kapak yoksa
+  /// boş resim yerine 404 döner ve uygulama çizili afişe geçer.
+  static String openLibraryCover(String isbn) =>
+      'https://covers.openlibrary.org/b/isbn/$isbn-L.jpg?default=false';
+
+  Uri _uri(String path, Map<String, String> params) =>
+      Uri.https('www.googleapis.com', path, {
+        ...params,
+        // Konum belirlenemeyen ağlarda (ör. mobil veri) boş sonuç gelmesin.
+        'country': 'TR',
+        if (_apiKey.isNotEmpty) 'key': _apiKey,
+      });
 
   Future<List<ContentItem>> _fetch(
     Map<String, String> params, {
@@ -219,14 +246,15 @@ class GoogleBooksService implements ContentService {
   /// Kapak adresi. [large] ise Detay için büyük boyutu tercih eder.
   static String? _coverUrl(dynamic links, {bool large = false}) {
     if (links is! Map) return null;
-    final url = (large
-            ? (links['large'] ??
-                links['medium'] ??
-                links['small'] ??
-                links['thumbnail'] ??
-                links['smallThumbnail'])
-            : (links['thumbnail'] ?? links['smallThumbnail']))
-        as String?;
+    final url =
+        (large
+                ? (links['large'] ??
+                      links['medium'] ??
+                      links['small'] ??
+                      links['thumbnail'] ??
+                      links['smallThumbnail'])
+                : (links['thumbnail'] ?? links['smallThumbnail']))
+            as String?;
     if (url == null) return null;
     // Android http adreslerini engeller; kapakları https ile iste.
     return url.replaceFirst('http://', 'https://').replaceAll('&edge=curl', '');
