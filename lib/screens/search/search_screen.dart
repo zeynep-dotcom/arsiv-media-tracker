@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'package:arsiv_app/screens/search/barcode_scan_screen.dart';
 import 'package:arsiv_app/core/config/genre_map.dart';
 import 'package:arsiv_app/core/theme/app_theme.dart';
 import 'package:arsiv_app/models/content_item.dart';
@@ -90,14 +91,15 @@ class _SearchScreenState extends State<SearchScreen> {
     });
 
     Future<(ContentType, List<ContentItem>?, String?)> fetchOne(
-        ContentType type) async {
+      ContentType type,
+    ) async {
       final service = AppServices.forType(type);
       try {
         final items = q.isEmpty
             ? await service.getPopular()
             : genre != null
-                ? await service.getByGenre(genre)
-                : await service.search(q);
+            ? await service.getByGenre(genre)
+            : await service.search(q);
         return (type, items, null);
       } catch (e) {
         return (type, null, '$e');
@@ -123,8 +125,9 @@ class _SearchScreenState extends State<SearchScreen> {
     final n = GenreMap.normalize(q);
     final genre = _genre;
     if (genre != null) {
-      return item.genres.any((g) => GenreMap.normalize(g) ==
-          GenreMap.normalize(genre.label));
+      return item.genres.any(
+        (g) => GenreMap.normalize(g) == GenreMap.normalize(genre.label),
+      );
     }
     return GenreMap.normalize(item.title).contains(n) ||
         item.genres.any((g) => GenreMap.normalize(g).contains(n));
@@ -172,7 +175,15 @@ class _SearchScreenState extends State<SearchScreen> {
                 hintText: 'Film, kitap, oyun ya da tür ara',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _query.isEmpty
-                    ? null
+                    ? IconButton(
+                        icon: const Icon(Icons.qr_code_scanner),
+                        tooltip: 'Barkodla kitap bul',
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const BarcodeScanScreen(),
+                          ),
+                        ),
+                      )
                     : IconButton(
                         icon: const Icon(Icons.close),
                         onPressed: () {
@@ -196,8 +207,7 @@ class _SearchScreenState extends State<SearchScreen> {
               padding: EdgeInsets.fromLTRB(16, 14, 16, 6),
               child: Text(
                 'Türe göre ara',
-                style: TextStyle(
-                    fontSize: 13, color: AppColors.textSecondary),
+                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
               ),
             ),
             SizedBox(
@@ -234,7 +244,9 @@ class _SearchScreenState extends State<SearchScreen> {
               child: Text(
                 'Tür araması: ${_genre!.label} · film, kitap ve oyun birlikte',
                 style: const TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.w600),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           if (_loading)
@@ -252,7 +264,9 @@ class _SearchScreenState extends State<SearchScreen> {
               child: Text(
                 '${entry.key.plural}: ${entry.value} Örnek veri gösteriliyor.',
                 style: const TextStyle(
-                    fontSize: 11, color: AppColors.textSecondary),
+                  fontSize: 11,
+                  color: AppColors.textSecondary,
+                ),
               ),
             ),
           const SizedBox(height: 12),
@@ -268,11 +282,11 @@ class _SearchScreenState extends State<SearchScreen> {
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      crossAxisSpacing: 10,
-                      mainAxisSpacing: 14,
-                      childAspectRatio: 0.52,
-                    ),
+                          crossAxisCount: 3,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 14,
+                          childAspectRatio: 0.52,
+                        ),
                     itemCount: results.length,
                     itemBuilder: (_, i) =>
                         ContentCard(item: results[i], width: double.infinity),
