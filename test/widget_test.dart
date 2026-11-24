@@ -2,13 +2,14 @@ import 'dart:convert';
 
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import 'package:arsiv_app/app.dart';
 import 'package:arsiv_app/core/config/genre_map.dart';
+import 'package:arsiv_app/core/theme/app_theme.dart';
 import 'package:arsiv_app/models/content_item.dart';
 import 'package:arsiv_app/models/content_type.dart';
 import 'package:arsiv_app/models/library_entry.dart';
@@ -21,6 +22,7 @@ import 'package:arsiv_app/services/library_store.dart';
 import 'package:arsiv_app/services/rawg_service.dart';
 import 'package:arsiv_app/services/sample_data.dart';
 import 'package:arsiv_app/services/tmdb_service.dart';
+import 'package:arsiv_app/widgets/film_extras_section.dart';
 
 /// Testlerde internete çıkmamak için sahte servis.
 class FakeService implements ContentService {
@@ -469,6 +471,234 @@ void main() {
       final detail = await TmdbService(client: client, token: 'eyJ.test.token')
           .getDetails(sample);
       expect(detail, same(sample));
+    });
+
+    test('getWatchProviders Türkiye (TR) platformlarını tekrarsız getirir',
+        () async {
+      final client = MockClient((request) async {
+        expect(request.url.path, '/3/movie/42/watch/providers');
+        return jsonResponse({
+          'id': 42,
+          'results': {
+            'US': {
+              'flatrate': [
+                {'provider_id': 9, 'provider_name': 'Amazon Prime'}
+              ]
+            },
+            'TR': {
+              'flatrate': [
+                {
+                  'provider_id': 8,
+                  'provider_name': 'Netflix',
+                  'logo_path': '/netflix.jpg',
+                },
+              ],
+              'rent': [
+                {
+                  'provider_id': 8,
+                  'provider_name': 'Netflix',
+                  'logo_path': '/netflix.jpg',
+                },
+                {
+                  'provider_id': 2,
+                  'provider_name': 'Apple TV',
+                  'logo_path': '/apple.jpg',
+                },
+              ],
+            },
+          },
+        });
+      });
+
+      const item = ContentItem(
+        id: 'tmdb_42',
+        type: ContentType.film,
+        title: 'Başlangıç',
+        year: 2010,
+        rating: 8.8,
+        genres: ['Bilim kurgu'],
+        description: '',
+        meta: '',
+        artColors: [],
+      );
+
+      final providers =
+          await TmdbService(client: client, token: 'eyJ.test.token')
+              .getWatchProviders(item);
+
+      expect(providers.map((p) => p.name), ['Netflix', 'Apple TV']);
+      expect(
+        providers.first.logoUrl,
+        'https://image.tmdb.org/t/p/w92/netflix.jpg',
+      );
+    });
+
+    test('getWatchProviders TR verisi yoksa boş liste döner', () async {
+      final client = MockClient((_) async => jsonResponse({
+            'id': 42,
+            'results': {
+              'US': {'flatrate': []},
+            },
+          }));
+      const item = ContentItem(
+        id: 'tmdb_42',
+        type: ContentType.film,
+        title: 'X',
+        year: 2020,
+        rating: 0,
+        genres: ['Film'],
+        description: '',
+        meta: '',
+        artColors: [],
+      );
+      final providers =
+          await TmdbService(client: client, token: 'eyJ.test.token')
+              .getWatchProviders(item);
+      expect(providers, isEmpty);
+    });
+
+    test('getTrailerUrl resmi YouTube fragmanını seçer, yoksa null döner',
+        () async {
+      final client = MockClient((request) async {
+        expect(request.url.path, '/3/movie/42/videos');
+        return jsonResponse({
+          'id': 42,
+          'results': [
+            {
+              'site': 'YouTube',
+              'type': 'Teaser',
+              'official': true,
+              'key': 'teaser123',
+            },
+            {
+              'site': 'YouTube',
+              'type': 'Trailer',
+              'official': true,
+              'key': 'YoHD9XEInc0',
+            },
+          ],
+        });
+      });
+      const item = ContentItem(
+        id: 'tmdb_42',
+        type: ContentType.film,
+        title: 'Başlangıç',
+        year: 2010,
+        rating: 8.8,
+        genres: ['Bilim kurgu'],
+        description: '',
+        meta: '',
+        artColors: [],
+      );
+
+      final url = await TmdbService(client: client, token: 'eyJ.test.token')
+          .getTrailerUrl(item);
+      expect(url.toString(), 'https://www.youtube.com/watch?v=YoHD9XEInc0');
+
+      final emptyClient =
+          MockClient((_) async => jsonResponse({'id': 42, 'results': []}));
+      final noUrl =
+          await TmdbService(client: emptyClient, token: 'eyJ.test.token')
+              .getTrailerUrl(item);
+      expect(noUrl, isNull);
+    });
+
+    testWidgets(
+        'FilmExtrasSection platformları, JustWatch kaynağını ve fragman butonunu gösterir',
+        (tester) async {
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('/watch/providers')) {
+          return jsonResponse({
+            'results': {
+              'TR': {
+                'flatrate': [
+                  {'provider_id': 8, 'provider_name': 'Netflix'},
+                  {'provider_id': 337, 'provider_name': 'Disney Plus'},
+                ],
+              },
+            },
+          });
+        }
+        return jsonResponse({
+          'results': [
+            {
+              'site': 'YouTube',
+              'type': 'Trailer',
+              'official': true,
+              'key': 'abc123xyz',
+            },
+          ],
+        });
+      });
+      final service = TmdbService(client: client, token: 'eyJ.test.token');
+      const item = ContentItem(
+        id: 'tmdb_42',
+        type: ContentType.film,
+        title: 'Başlangıç',
+        year: 2010,
+        rating: 8.8,
+        genres: ['Bilim kurgu'],
+        description: '',
+        meta: '',
+        artColors: [],
+      );
+
+      Uri? launched;
+      await tester.pumpWidget(MaterialApp(
+        theme: AppTheme.dark(),
+        home: Scaffold(
+          body: FilmExtrasSection(
+            item: item,
+            service: service,
+            onLaunchUrl: (url) async {
+              launched = url;
+              return true;
+            },
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nerede izlenir'), findsOneWidget);
+      expect(find.text('Kaynak: JustWatch'), findsOneWidget);
+      expect(find.text('Netflix'), findsOneWidget);
+      expect(find.text('Disney Plus'), findsOneWidget);
+      expect(find.text('Fragmanı izle'), findsOneWidget);
+
+      await tester.tap(find.text('Fragmanı izle'));
+      await tester.pump();
+      expect(launched.toString(), 'https://www.youtube.com/watch?v=abc123xyz');
+    });
+
+    testWidgets(
+        'FilmExtrasSection platform ve fragman yoksa hiçbir şey göstermez',
+        (tester) async {
+      final client =
+          MockClient((_) async => jsonResponse({'results': <String, dynamic>{}}));
+      final service = TmdbService(client: client, token: 'eyJ.test.token');
+      const item = ContentItem(
+        id: 'tmdb_42',
+        type: ContentType.film,
+        title: 'Başlangıç',
+        year: 2010,
+        rating: 8.8,
+        genres: ['Bilim kurgu'],
+        description: '',
+        meta: '',
+        artColors: [],
+      );
+
+      await tester.pumpWidget(MaterialApp(
+        theme: AppTheme.dark(),
+        home: Scaffold(
+          body: FilmExtrasSection(item: item, service: service),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nerede izlenir'), findsNothing);
+      expect(find.text('Kaynak: JustWatch'), findsNothing);
+      expect(find.text('Fragmanı izle'), findsNothing);
     });
   });
 
